@@ -1,0 +1,35 @@
+{
+  "name": "everyone-tube",
+  "version": "0.0.0",
+  "description": "Everyone Tube Huge Update (actually it not it just recoded)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node --env-file=.env index.js"
+  },
+  "author": "Tabano Studios, tabanopro",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "axios": "^1.14.0",
+    "bcrypt": "^6.0.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "fs": "^0.0.1-security",
+    "hcaptcha": "^0.2.0",
+    "mariadb": "^3.4.5",
+    "multer": "^2.0.2",
+    "mysql2": "^3.14.3",
+    "node-cache": "^5.1.2",
+    "path": "^0.12.7",
+    "pm2": "^6.0.10",
+    "sequelize": "^6.37.7",
+    "tailwindcss": "^4.3.3",
+    "url": "^0.11.4"
+  }
+}

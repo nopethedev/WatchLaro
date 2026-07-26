@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="/themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="/themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Everyone Tube | <%= profileUsername %>
+    </title>
+
+</head>
+
+<body>
+    <%- include('header.ejs') %>
+        <div class="content">
+            <center>
+                <h1>
+                    <%= error %>
+                </h1>
+                <img src="<%= pfp %>" alt="" height="100px" , width="100px"
+                    style="border-radius: 100%; display: block;">
+                <h1 style="display: inline">
+                    <%= profileUsername %>
+                </h1>
+                <h4 style="display:inline; background-color:  greenyellow; border-radius: 10px;">
+                    <%= profileRank %>
+                </h4>
+                <br>
+                <h5 style="display: inline;">Followers: <%= profileFollowers %>
+                </h5>
+                <button style="display: inline;" class="btn btn-success">Follow</button>
+                <% if (!username==profileUsername && loggedin) { %>
+
+                    <% } %>
+
+                        <% if (loggedin && username==profileUsername) { %>
+
+                            <h4>Edit my bio</h4>
+                            <textarea name="bioEditor" id="bioEditor" style="resize:none;"><%= profileBio %></textarea>
+                            <button class="btn btn-primary" id="saveBtn">Save</button>
+                            <script>
+                                let cooldown = false;
+                                const saveButton = document.getElementById("saveBtn")
+                                const easyMde = new EasyMDE({
+                                    element: document.getElementById("bioEditor")
+                                });
+
+                                document.getElementById("saveBtn").addEventListener("click", async () => {
+                                    const bioMarkdown = easyMde.value();
+
+                                    // Example: save to API (replace with your own endpoint)
+
+                                    if (!cooldown) {
+                                        let response = await fetch("/api/user/auth/bioupdate", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ bio: bioMarkdown, userid: "<%= userid %>" })
+                                        });
+                                        response = await response.json();
+                                        if (response.error) {
+                                            Swal.fire({
+                                                title: "Failed!",
+                                                text: "Note: Do not use emojis; Error message:"+response.error_msg,
+                                                icon: "error"
+                                            });
+                                        } else {
+                                            Swal.fire({
+                                                title: "Success!",
+                                                text: "Your bio was successfully saved!",
+                                                icon: "success"
+                                            });
+                                        }
+
+                                        cooldown = true
+                                        setTimeout(() => {
+                                            setTimeout(() => {
+                                                cooldown = false
+                                            }, 3000);
+                                        }, 1000);
+
+                                    } else {
+                                        Swal.fire({
+                                            title: "Cooldown",
+                                            text: "Please wait for the cooldown to end!",
+                                            icon: "warning"
+                                        });
+
+                                    }
+
+                                });
+                            </script>
+                            <% }else{ %>
+                                <p style="display: block;">
+                                    <%= profileBio %>
+                                </p>
+                                <% } %>
+
+            </center>
+        </div>
+
+</body>
+
+</html>

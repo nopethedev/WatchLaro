@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="/themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="/themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch Laro</title>
+
+</head>
+
+<body>
+    <%- include('../header.ejs') %>
+        <div class="content">
+            <div class="flex flex-col justify-center items-center">
+                <button class="bg-blue-700 w-28 h-8 rounded-md hover:scale-105 transition-all "><a href="./"><i class="fa-solid fa-arrow-left"></i> Back</a></button>
+            </div>
+            <div class="w-full p-10">
+                <h1 id="seasonName" class="font-black text-4xl">Season Number...</h1>
+                <p id="overviewThing">Overview goes here...</p>
+                <br>
+                <div class="grid grid-cols-1 md:grid-cols-6 w-full gap-2" id="episodeList">
+                    
+                </div>
+                </div>
+
+            </div>
+
+            <br>
+
+        </div>
+        <script>
+            //get data
+            (async () => {
+                const parts = window.location.pathname.split("/")
+                const response = await fetch("/api/tv/season/info", { method: "POST", headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ q: parts[2], season: parts[3] }) }) //eee
+                if (response.ok) {
+                    const movieData = await response.json()
+                    document.getElementById("seasonName").innerText = movieData.name
+                    document.getElementById("overviewThing").innerText = movieData.overview
+                    //document.getElementById("movie-backdrop").src = "https://image.tmdb.org/t/p/original/" + movieData.backdrop_path
+                    //document.getElementById("movie-watch").href = "/movies/m?q=" + params.get("q")
+
+                    const seasonsContainer = document.getElementById("episodeList")
+                    movieData.episodes.forEach(element => {
+
+                        seasonsContainer.insertAdjacentHTML("beforeend", `
+                <div class="relative bg-gray-900 w-58 p-2 rounded-md hover:scale-105 transition-all group">
+                        <a href="/tv/${parts[2]}/${element.season_number + "/" + element.episode_number}" class="inset-0 absolute z-10"></a>
+                        <div class="w-full flex flex-col justify-center items-center overflow-hidden rounded-md" >
+                             <img src="${element.still_path ? "https://image.tmdb.org/t/p/w200/" + element.still_path : "https://placehold.co/1600x900"}" alt="" class="max-w-48 group-hover:blur-sm transition-all rounded-md">
+                            <i class="fa-solid fa-play absolute inline-block opacity-0 translate-y-full group-hover:translate-y-0 group-hover:opacity-100 group-hover:scale-150 transition-all" ></i>  
+                        </div>
+                       <h5 class="text-center font-semibold uppercase font-mono text-xs">Episode ${element.episode_number}</h5>
+                       <h1 class="text-center font-bold text-md">${element.name ? element.name : "Untitled"}</h1>
+                    </div>
+                    `);
+                        //document.getElementById("movie-title").innerText = "yay"
+                    });
+                } else {
+                    //document.getElementById("movie-title").innerText = response.status
+                }
+            })();
+
+        </script>
+
+</body>
+
+</html>

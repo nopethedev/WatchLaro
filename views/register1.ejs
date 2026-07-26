@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Everyone Tube | Register</title>
+
+</head>
+
+<body>
+    <%- include('header.ejs') %>
+        <div class="content">
+
+            <div class="w-full justify-items-center">
+                <h2 style="text-align: center;">Register to Watch Laro</h2>
+                <p></p>
+                <div class="md:bg-slate-900 w-80 h-128 p-16 align-center justify-items-center rounded-md">
+                    <form action="/register" method="post">
+
+                        <label for="username" class="form-label">Username:</label>
+                        <input type="text" name="username" id="username" class="form-control" required>
+
+                        <label for="email" class="form-label">Email: </label>
+                        <input type="email" name="email" id="email" class=" form-control" required>
+                        <label for="password" class="form-label">Password:</label>
+                        <input type="password" name="password" id="password" class="form-control" required>
+                        <div class="h-captcha" data-sitekey="70b4a6d2-eb3e-46d0-9b60-234ec3e61f24"></div>
+                        <center><button type="submit" class="btn btn-primary">Register!</button></center>
+                        <p>
+                            <%= error %>
+                        </p>
+                    </form>
+                </div>
+            </div>
+
+
+        </div>
+
+</body>
+
+</html>

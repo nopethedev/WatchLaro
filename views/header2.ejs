@@ -1,0 +1,123 @@
+<head>
+    <script>
+tailwind.config = {
+  corePlugins: {
+    preflight: false,
+  }
+}
+</script>
+   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css"
+        integrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.3/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/easymde/dist/easymde.min.css">
+    <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/izitoast/dist/css/iziToast.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/izitoast/dist/js/iziToast.min.js"></script>
+    
+    <style>
+        .main-navbar {
+            background-color: #2f61d7 !important;
+            /* your custom color */
+        }
+    </style>
+    
+    <script type="module">
+
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-analytics.js";
+        // TODO: Add SDKs for Firebase products that you want to use
+        // https://firebase.google.com/docs/web/setup#available-libraries
+
+        // Your web app's Firebase configuration
+        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+        const firebaseConfig = {
+            apiKey: "AIzaSyCRLHBK2gqhNi5MCLs-eLPG2ZlS0ksdkzQ",
+            authDomain: "everyonetube-22fab.firebaseapp.com",
+            projectId: "everyonetube-22fab",
+            storageBucket: "everyonetube-22fab.firebasestorage.app",
+            messagingSenderId: "489174042260",
+            appId: "1:489174042260:web:24f45df10dfafa19d51681",
+            measurementId: "G-4Y07LV9PKL"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+    </script>
+</head>
+
+<body class="">
+    <nav class="navbar navbar-expand-lg bg-body-tertiary main-navbar">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <img src="/logotemp.png" alt="Logo" width="30" height="24" class="d-inline-block align-text-top">WatchLaro</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false"
+                aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="/"><i
+                                class="fa-solid fa-video"></i>Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="/movies/search"><i
+                                class="fa-solid fa-film"></i>Search</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/comingsoon"><i class="fa-solid fa-face-laugh-beam"></i>My Lists</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                            <i class="fa-solid fa-user"></i>My Account
+                        </a>
+                        <% if (loggedin) { %>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#">
+                                        <i class="fa-solid fa-circle-user"></i>
+                                        <%= username %>
+                                    </a></li>
+                                <li><a class="dropdown-item" href="#"><i class="fa-solid fa-folder-open"></i>My
+                                        stuff</a></li>
+                                <li>
+                                    <hr class="dropdown-divider">
+                                </li>
+                                <li><a class="dropdown-item" href="#"><i class="fa-solid fa-user-gear"></i>Settings</a>
+                                </li>
+                            </ul>
+                            <% }else{ %>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="/register"><i class="fa-solid fa-circle-plus"></i>Account system disabled.</a></li>
+                                    <li><a class="dropdown-item" href="/register"><i class="fa-solid fa-circle-plus"></i>Register</a></li>
+                                    <li><a class="dropdown-item" href="/signin"><i
+                                                class="fa-solid fa-right-to-bracket"></i>Login</a></li>
+
+                                </ul>
+                                <% } %>
+
+                    </li>
+
+                </ul>
+
+                <form class="d-flex" role="search">
+                    <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search" />
+                    <button class="btn btn-outline-success" type="submit">Search</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+</body>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="/themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="/themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch Laro</title>
+
+</head>
+
+<body>
+    <%- include('../header.ejs') %>
+        <div class="content">
+            <div class="relative w-full h-[70vh] overflow-hidden">
+                <img src="" alt="" id="movie-backdrop"
+                    class="absolute inset-0 w-full h-full object-cover opacity-50">
+                <div class="absolute inset-0 bg-gradient-to-t from-[#020617] to-[#020617] to-transparent"></div>
+                <div class="relative z-10 flex flex-col justify-end h-full p-10 gap-4">
+
+                    <h1 class="text-4xl font-black" id="movie-title">Movie Name</h1><button 
+                        class="md:ml-[90%] absolute font-black bg-blue-700 w-20 h-10 -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-all">
+                        <a href="" id="movie-watch">Watch</a></button>
+
+                    <p class="text-l font-bold" id="movie-desc">Lorum ispum...</p>
+                </div>
+            </div>
+
+        </div>
+        <script>
+            //get data
+            (async () => {
+                const params = new URLSearchParams(window.location.search)
+            const response = await fetch("/api/movies/info", { method: "POST", headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ q: params.get("q") }) })
+            if(response.ok){
+                const movieData = await response.json()
+                document.getElementById("movie-title").innerText = movieData.title
+                document.getElementById("movie-desc").innerText = movieData.overview
+                document.getElementById("movie-backdrop").src = "https://image.tmdb.org/t/p/original/" + movieData.backdrop_path
+                document.getElementById("movie-watch").href = "/movies/m?q=" + params.get("q")
+            }
+            })();
+
+        </script>
+
+</body>
+
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Everyone Tube | Sign In</title>
+
+</head>
+<body>
+    <%- include('header.ejs') %>
+    <div class="content">
+
+            <h2 style="text-align: center;">Sign In to WatchLaro</h2>
+        <p></p>
+        <div style="margin: 20px auto; width: 301px;">
+            <form action="/signin" method="post">
+            <label for="username" class="form-label">Username:</label>
+            <input type="text" name="username" id="username" class="form-control"required>
+            <label for="password" class="form-label">Password:</label>
+            <input type="password" name="password" id="password" required class="form-control">
+
+
+           <center> <button type="submit" class="btn btn-primary">Login</button></center>
+            <p><%= error %></p>
+        </form>
+        </div>
+        
+
+
+    </div>
+    
+</body>
+</html>

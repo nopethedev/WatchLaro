@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="/themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="/themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search for shows</title>
+
+</head>
+
+<body>
+    <%- include("../header.ejs"); %>
+        <div class="content">
+            <div class="flex w-full justify-center items-center align-center">
+                <button class="bg-blue-500 w-8 h-8 rounded-md m-1 hover:scale-110 transition-all duration-150"><a href="/movies/search"><i class="fa-solid fa-film"></i></a></button>
+                <button class="bg-blue-500 w-8 h-8 rounded-md m-1 hover:scale-110 transition-all duration-150"><a href="/tv/search"><i class="fa-solid fa-tv"></i></a></i></button>
+            </div>
+            <div class="flex flex-col justify-center w-full px-4">
+                <input type="text" id="searchBox" placeholder="A movie..." class="rounded-lg mx-auto mt-5 w-full md:w-1/2 lg:w-3/4 h-10 text-center transition-all duration-200 ease-in-out bg-gray-900"  />
+                <div id="results" class="w-full mt-5"></div>
+            </div>
+
+            <script>
+                const movieExamples = ["A Minecraft Movie", "Backrooms", "Final Destination"]
+                let typingTimer;
+                const doneTypingInterval = 1500; // 1.5 seconds
+                const searchBox = document.getElementById('searchBox');
+                const resultsDiv = document.getElementById('results');
+
+                searchBox.addEventListener('input', function () {
+                    clearTimeout(typingTimer);
+                    typingTimer = setTimeout(() => {
+                        search(searchBox.value)
+                    }, doneTypingInterval);
+                });
+
+                function search(quer) {
+                    fetch('/api/movies/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ q: quer })
+                    })
+                        .then(res => res.json())
+                        .then(data => {
+                            console.log(data);
+                            resultsDiv.innerHTML = ''; // Clear previous results
+                            if (data.results) {
+                                data.results.forEach(v => {
+                                    // Create a button with an image
+                                    const btn = document.createElement('button');
+                                    btn.onclick = function () {
+                                        window.location.href = "/movies/info?q=" + v.tmdb_id;
+                                    };
+                                    const img = document.createElement('img');
+                                    img.classList.add("w-[100px]", "h-[150px]", "rounded-lg", "m-1", "hover:p-1", "transition-all", "duration-150")
+                                    img.src = v.poster
+                                        ? v.poster
+                                        : 'https://placehold.co/100x150';
+                                    img.alt = v.title;
+                                    //img.style.width = '100px';
+                                    //img.style.height = '150px'
+                                    btn.appendChild(img);
+                                    resultsDiv.appendChild(btn);
+                                });
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error:', err);
+                        });
+                }
+                while (false) {
+                    const randomMovie = movieExamples[Math.floor(Math.random() * movieExamples.length)]
+
+                }
+            </script>
+        </div>
+
+
+</body>
+
+</html>

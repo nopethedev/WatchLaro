@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WatchLaro | Register</title>
+    <!-- Tailwind CSS CDN (No compile required) -->
+    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+</head>
+
+<body class="bg-slate-950 text-white min-h-screen overflow-hidden">
+    <%- include('header.ejs') %>
+
+    <main class="h-[calc(100vh-4rem)] flex overflow-hidden" x-data="authPage()">
+        <!-- Left Side: Brand/Background Section -->
+        <div class="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-shrink-0">
+            <!-- Gradient Background -->
+            <div class="absolute inset-0 bg-gradient-to-br from-brand via-slate-900 to-slate-950"></div>
+
+            <!-- Evenly Spaced Dots Pattern -->
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(122,150,216,0.15)_1px,_transparent_1px)] bg-[size:40px_40px] opacity-50"></div>
+
+            <!-- Content Overlay - Right Aligned -->
+            <div class="relative z-10 flex flex-col justify-center items-end h-full p-12 lg:p-20 lg:pr-32 flex-shrink-0 w-full text-right">
+                <h1 class="text-4xl lg:text-6xl font-bold text-white animate-fade-in-up max-w-xl">
+                    Streaming for everyone
+                </h1>
+
+                <p class="mt-6 text-lg lg:text-xl text-slate-300 max-w-md leading-relaxed animate-fade-in-up" style="animation-delay: 150ms;">
+                    Create your free account and start streaming thousands of movies and TV shows instantly.
+                </p>
+            </div>
+        </div>
+
+        <!-- Right Side: Auth Forms -->
+        <div class="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 overflow-y-auto max-h-full">
+            <div class="w-full max-w-md flex-shrink-0 bg-slate-950/50 backdrop-blur-sm rounded-2xl p-6 lg:p-8 border border-slate-800">
+                <!-- Tab Switcher -->
+                <div class="flex mb-8 border-b border-slate-700" role="tablist">
+                    <button
+                        role="tab"
+                        :class="activeTab === 'register' ? 'border-brand text-white' : 'border-transparent text-slate-400 hover:text-slate-200'"
+                        @click="activeTab = 'register'"
+                        class="flex-1 py-3 px-4 text-center font-medium border-b-2 transition-colors focus:outline-none"
+                        :aria-selected="activeTab === 'register'"
+                    >
+                        Register
+                    </button>
+                    <button
+                        role="tab"
+                        :class="activeTab === 'login' ? 'border-brand text-white' : 'border-transparent text-slate-400 hover:text-slate-200'"
+                        @click="activeTab = 'login'"
+                        class="flex-1 py-3 px-4 text-center font-medium border-b-2 transition-colors focus:outline-none"
+                        :aria-selected="activeTab === 'login'"
+                    >
+                        Login
+                    </button>
+                </div>
+
+                <!-- Register Form -->
+                <form x-show="activeTab === 'register'" x-transition.opacity action="/register" method="post" class="space-y-5" x-data="registerForm()" @submit="if (!validateAll()) { $event.preventDefault(); } else { isSubmitting = true; }">
+                    <!-- Username Field -->
+                    <div>
+                        <label for="username" class="block text-sm font-medium text-slate-300 mb-2">
+                            <i class="fa-solid fa-user mr-2 text-brand"></i>Username
+                        </label>
+                        <div class="relative">
+                            <input type="text" name="username" id="username" required autocomplete="username"
+                                x-model="form.username" @blur="validateUsername()"
+                                class="w-full px-4 py-3.5 bg-slate-800 border-2 border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all duration-200 shadow-inner"
+                                placeholder="Choose a username">
+                            <div x-show="errors.username" x-transition
+                                class="absolute right-4 top-1/2 -translate-y-1/2 text-red-400">
+                                <i class="fa-solid fa-circle-exclamation"></i>
+                            </div>
+                        </div>
+                        <p x-show="errors.username" x-transition class="mt-1.5 text-sm text-red-400"
+                            x-text="errors.username"></p>
+                    </div>
+
+                    <!-- Email Field -->
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-slate-300 mb-2">
+                            <i class="fa-solid fa-envelope mr-2 text-brand"></i>Email
+                        </label>
+                        <div class="relative">
+                            <input type="email" name="email" id="email" required autocomplete="email"
+                                x-model="form.email" @blur="validateEmail()"
+                                class="w-full px-4 py-3.5 bg-slate-800 border-2 border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all duration-200 shadow-inner"
+                                placeholder="Enter your email">
+                            <div x-show="errors.email" x-transition
+                                class="absolute right-4 top-1/2 -translate-y-1/2 text-red-400">
+                                <i class="fa-solid fa-circle-exclamation"></i>
+                            </div>
+                        </div>
+                        <p x-show="errors.email" x-transition class="mt-1.5 text-sm text-red-400"
+                            x-text="errors.email"></p>
+                    </div>
+
+                    <!-- Password Field -->
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-slate-300 mb-2">
+                            <i class="fa-solid fa-lock mr-2 text-brand"></i>Password
+                        </label>
+                        <div class="relative">
+                            <input :type="showPassword ? 'text' : 'password'" name="password" id="password" required
+                                autocomplete="new-password" x-model="form.password" @input="checkPasswordStrength()"
+                                @blur="validatePassword()"
+                                class="w-full px-4 py-3.5 bg-slate-800 border-2 border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all duration-200 pr-12 shadow-inner"
+                                placeholder="Create a password">
+                            <button type="button" @click="showPassword = !showPassword"
+                                class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                                :aria-label="showPassword ? 'Hide password' : 'Show password'">
+                                <i class="fa-solid" :class="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+                            </button>
+                        </div>
+
+                        <!-- Password Strength Meter -->
+                        <div class="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden"
+                            x-show="form.password.length > 0">
+                            <div class="h-full transition-all duration-300 ease-out rounded-full"
+                                :class="passwordStrengthClass" :style="'width: ' + passwordStrength + '%'"></div>
+                        </div>
+                        <p class="mt-1 text-xs text-slate-400" x-text="passwordStrengthText"></p>
+                        <p x-show="errors.password" x-transition class="mt-1.5 text-sm text-red-400"
+                            x-text="errors.password"></p>
+                    </div>
+
+                    <!-- Confirm Password Field -->
+                    <div>
+                        <label for="confirmPassword" class="block text-sm font-medium text-slate-300 mb-2">
+                            <i class="fa-solid fa-lock mr-2 text-brand"></i>Confirm Password
+                        </label>
+                        <div class="relative">
+                            <input :type="showConfirmPassword ? 'text' : 'password'" name="confirmPassword"
+                                id="confirmPassword" required autocomplete="new-password"
+                                x-model="form.confirmPassword" @blur="validateConfirmPassword()"
+                                class="w-full px-4 py-3.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all duration-200 pr-12"
+                                placeholder="Confirm your password">
+                            <button type="button" @click="showConfirmPassword = !showConfirmPassword"
+                                class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                                :aria-label="showConfirmPassword ? 'Hide password' : 'Show password'">
+                                <i class="fa-solid" :class="showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+                            </button>
+                        </div>
+                        <p x-show="errors.confirmPassword" x-transition class="mt-1.5 text-sm text-red-400"
+                            x-text="errors.confirmPassword"></p>
+                    </div>
+
+                    <!-- hCaptcha -->
+                    <div class="h-captcha" data-sitekey="70b4a6d2-eb3e-46d0-9b60-234ec3e61f24"></div>
+
+                    <!-- Error Message from Server -->
+                    <% if (error) { %>
+                    <div class="flex items-center gap-2 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-red-300 text-sm animate-shake"
+                        x-cloak>
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>
+                            <%= error %>
+                        </span>
+                    </div>
+                    <% } %>
+
+                    <!-- Submit Button -->
+                    <button type="submit" :disabled="isSubmitting"
+                        class="w-full py-3.5 bg-gradient-to-r from-brand to-brand/80 hover:from-brand/90 hover:to-brand text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-slate-950 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden">
+                        <span x-show="!isSubmitting"
+                            class="relative flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-user-plus"></i>
+                            Create Account
+                        </span>
+                        <span x-show="isSubmitting" class="relative flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-spinner fa-spin"></i>
+                            Creating Account...
+                        </span>
+                    </button>
+                </form>
+
+                <!-- Login Form -->
+                <form x-show="activeTab === 'login'" x-transition.opacity action="/signin" method="post" class="space-y-5" x-data="loginForm()">
+                    <!-- Username/Email Field -->
+                    <div>
+                        <label for="loginIdentifier" class="block text-sm font-medium text-slate-300 mb-2">
+                            <i class="fa-solid fa-user mr-2 text-brand"></i>Username or Email
+                        </label>
+                        <div class="relative">
+                            <input type="text" name="identifier" id="loginIdentifier" required autocomplete="username"
+                                x-model="form.identifier" @blur="validateIdentifier()"
+                                class="w-full px-4 py-3.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all duration-200"
+                                placeholder="Enter username or email">
+                            <div x-show="errors.identifier" x-transition
+                                class="absolute right-4 top-1/2 -translate-y-1/2 text-red-400">
+                                <i class="fa-solid fa-circle-exclamation"></i>
+                            </div>
+                        </div>
+                        <p x-show="errors.identifier" x-transition class="mt-1.5 text-sm text-red-400"
+                            x-text="errors.identifier"></p>
+                    </div>
+
+                    <!-- Password Field -->
+                    <div>
+                        <label for="loginPassword" class="block text-sm font-medium text-slate-300 mb-2">
+                            <i class="fa-solid fa-lock mr-2 text-brand"></i>Password
+                        </label>
+                        <div class="relative">
+                            <input :type="showLoginPassword ? 'text' : 'password'" name="password" id="loginPassword" required
+                                autocomplete="current-password" x-model="form.password"
+                                class="w-full px-4 py-3.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all duration-200 pr-12"
+                                placeholder="Enter your password">
+                            <button type="button" @click="showLoginPassword = !showLoginPassword"
+                                class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                                :aria-label="showLoginPassword ? 'Hide password' : 'Show password'">
+                                <i class="fa-solid" :class="showLoginPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+                            </button>
+                        </div>
+                        <p x-show="errors.password" x-transition class="mt-1.5 text-sm text-red-400"
+                            x-text="errors.password"></p>
+                    </div>
+
+                    <!-- Remember Me & Forgot Password -->
+                    <div class="flex items-center justify-between">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="remember" x-model="form.remember"
+                                class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-brand focus:ring-brand focus:ring-2">
+                            <span class="text-sm text-slate-300">Remember me</span>
+                        </label>
+                        <a href="#" class="text-sm text-brand hover:text-brand/80 transition-colors">Forgot password?</a>
+                    </div>
+
+                    <!-- hCaptcha -->
+                    <div class="h-captcha" data-sitekey="70b4a6d2-eb3e-46d0-9b60-234ec3e61f24"></div>
+
+                    <!-- Error Message from Server -->
+                    <% if (error) { %>
+                    <div class="flex items-center gap-2 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-red-300 text-sm animate-shake"
+                        x-cloak>
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>
+                            <%= error %>
+                        </span>
+                    </div>
+                    <% } %>
+
+                    <!-- Submit Button -->
+                    <button type="submit" :disabled="isSubmitting"
+                        class="w-full py-3.5 bg-gradient-to-r from-brand to-brand/80 hover:from-brand/90 hover:to-brand text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 focus:ring-offset-slate-950 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden">
+                        <span x-show="!isSubmitting"
+                            class="relative flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-right-to-bracket"></i>
+                            Sign In
+                        </span>
+                        <span x-show="isSubmitting" class="relative flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-spinner fa-spin"></i>
+                            Signing In...
+                        </span>
+                    </button>
+                </form>
+
+                <!-- Divider -->
+                <div class="relative my-8">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-slate-700"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm">
+                        <span class="px-4 bg-slate-950 text-slate-500">or continue with</span>
+                    </div>
+                </div>
+
+                <!-- Social Login Buttons -->
+                <div class="grid grid-cols-2 gap-3">
+                    <button type="button"
+                        class="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white hover:bg-slate-700 hover:border-slate-600 transition-all duration-200">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24">
+                            <path fill="currentColor"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path fill="currentColor"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path fill="currentColor"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                            <path fill="currentColor"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                        </svg>
+                        Google
+                    </button>
+                    <button type="button"
+                        class="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white hover:bg-slate-700 hover:border-slate-600 transition-all duration-200">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path
+                                d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                        </svg>
+                        GitHub
+                    </button>
+                </div>
+
+                <!-- Footer -->
+                <p class="mt-8 text-center text-sm text-slate-400">
+                    By continuing, you agree to our
+                    <a href="#" class="text-brand hover:text-brand/80 underline">Terms of Service</a>
+                    and
+                    <a href="#" class="text-brand hover:text-brand/80 underline">Privacy Policy</a>
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom Styles & Scripts -->
+    <style>
+        /* Custom Animations */
+        @keyframes fade-in-up {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .animate-fade-in-up {
+            animation: fade-in-up 0.6s ease-out forwards;
+            opacity: 0;
+        }
+
+        .animate-shake {
+            animation: shake 0.5s ease-in-out;
+        }
+
+        /* Focus visible for accessibility */
+        *:focus-visible {
+            outline: 2px solid #7a96d8;
+            outline-offset: 2px;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+
+    <script>
+        // Page-level auth toggle
+        function authPage() {
+            return {
+                activeTab: '<%= typeof activeTab !== "undefined" ? activeTab : "register" %>'
+            };
+        }
+
+        // Register Form Logic
+        function registerForm() {
+            return {
+                form: {
+                    username: '',
+                    email: '',
+                    password: '',
+                    confirmPassword: ''
+                },
+                errors: {},
+                showPassword: false,
+                showConfirmPassword: false,
+                isSubmitting: false,
+                passwordStrength: 0,
+                passwordStrengthText: '',
+                passwordStrengthClass: 'bg-gray-600',
+
+                checkPasswordStrength() {
+                    const password = this.form.password;
+                    let strength = 0;
+                    let text = '';
+                    let cls = 'bg-gray-600';
+
+                    if (password.length >= 8) strength += 25;
+                    if (password.length >= 12) strength += 15;
+                    if (/[A-Z]/.test(password)) strength += 20;
+                    if (/[a-z]/.test(password)) strength += 10;
+                    if (/[0-9]/.test(password)) strength += 15;
+                    if (/[^A-Za-z0-9]/.test(password)) strength += 15;
+
+                    strength = Math.min(strength, 100);
+
+                    if (strength < 30) {
+                        text = 'Weak';
+                        cls = 'bg-red-500';
+                    } else if (strength < 60) {
+                        text = 'Fair';
+                        cls = 'bg-yellow-500';
+                    } else if (strength < 80) {
+                        text = 'Good';
+                        cls = 'bg-blue-500';
+                    } else {
+                        text = 'Strong';
+                        cls = 'bg-green-500';
+                    }
+
+                    this.passwordStrength = strength;
+                    this.passwordStrengthText = `Password strength: ${text}`;
+                    this.passwordStrengthClass = cls;
+                },
+
+                validateUsername() {
+                    const username = this.form.username.trim();
+                    if (!username) {
+                        this.errors.username = 'Username is required';
+                    } else if (username.length < 3) {
+                        this.errors.username = 'Username must be at least 3 characters';
+                    } else if (username.length > 30) {
+                        this.errors.username = 'Username must be less than 30 characters';
+                    } else if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+                        this.errors.username = 'Username can only contain letters, numbers, underscore and hyphen';
+                    } else {
+                        this.errors.username = '';
+                    }
+                },
+
+                validateEmail() {
+                    const email = this.form.email.trim();
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!email) {
+                        this.errors.email = 'Email is required';
+                    } else if (!emailRegex.test(email)) {
+                        this.errors.email = 'Please enter a valid email address';
+                    } else {
+                        this.errors.email = '';
+                    }
+                },
+
+                validatePassword() {
+                    const password = this.form.password;
+                    if (!password) {
+                        this.errors.password = 'Password is required';
+                    } else if (password.length < 8) {
+                        this.errors.password = 'Password must be at least 8 characters';
+                    } else {
+                        this.errors.password = '';
+                    }
+                },
+
+                validateConfirmPassword() {
+                    if (!this.form.confirmPassword) {
+                        this.errors.confirmPassword = 'Please confirm your password';
+                    } else if (this.form.confirmPassword !== this.form.password) {
+                        this.errors.confirmPassword = 'Passwords do not match';
+                    } else {
+                        this.errors.confirmPassword = '';
+                    }
+                },
+
+                validateAll() {
+                    this.validateUsername();
+                    this.validateEmail();
+                    this.validatePassword();
+                    this.validateConfirmPassword();
+                    return Object.values(this.errors).every(e => !e);
+                }
+            };
+        }
+
+        // Login Form Logic
+        function loginForm() {
+            return {
+                form: {
+                    identifier: '',
+                    password: '',
+                    remember: false
+                },
+                errors: {},
+                showLoginPassword: false,
+                isSubmitting: false,
+
+                validateIdentifier() {
+                    const identifier = this.form.identifier.trim();
+                    if (!identifier) {
+                        this.errors.identifier = 'Username or email is required';
+                    } else {
+                        this.errors.identifier = '';
+                    }
+                },
+
+                validatePassword() {
+                    if (!this.form.password) {
+                        this.errors.password = 'Password is required';
+                    } else {
+                        this.errors.password = '';
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>

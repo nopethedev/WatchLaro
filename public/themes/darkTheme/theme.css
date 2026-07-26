@@ -1,0 +1,11 @@
+
+@font-face {
+  font-family: "Twemoji Mozilla";
+  src: url("https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/TwemojiMozilla.ttf") format("truetype");
+}
+body{
+    font-family: "Twemoji Mozilla",Arial, Helvetica, sans-serif;
+}
+button{
+    border-radius: 10px;
+}

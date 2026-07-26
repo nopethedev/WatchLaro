@@ -1,0 +1,167 @@
+<head>
+    
+    <!-- Alpine.js for interactive state (Dropdowns, Mobile Menu) -->
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Hide Alpine elements before load to prevent flicker -->
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css"
+        xintegrity="sha512-DxV+EoADOkOygM4IR9yXP8Sb2qwgidEmeqAEmDKIOfPRQZOWbXCzLC6vjbZyy0vPisbH2SyW27+ddLVCN+OMzQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.3/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/easymde/dist/easymde.min.css">
+    <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/izitoast/dist/css/iziToast.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/izitoast/dist/js/iziToast.min.js"></script>
+    <link rel="stylesheet" href="/styles.css">
+
+</head>
+
+<body class="bg-slate-950 text-white">
+    <!-- Navbar with Alpine.js state for mobile menu -->
+    <nav x-data="{ mobileMenuOpen: false }" class="bg-brandDark shadow-md text-white sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                
+                <!-- Logo -->
+                <a href="/" class="flex-shrink-0 flex items-center gap-2 text-xl font-bold hover:text-gray-100 transition">
+                    <img src="/WatchLaroLogoDarj.png" alt="Logo" class="w-auto h-6">
+                    WatchLaro
+                </a>
+
+                <!-- Mobile menu button -->
+                <div class="flex items-center lg:hidden">
+                    <button @click="mobileMenuOpen = !mobileMenuOpen" type="button" class="inline-flex items-center justify-center p-2 rounded-md hover:bg-brandDark focus:outline-none transition" aria-controls="mobile-menu" aria-expanded="false">
+                        <span class="sr-only">Toggle navigation</span>
+                        <i class="fa-solid fa-bars text-xl" x-show="!mobileMenuOpen"></i>
+                        <i class="fa-solid fa-xmark text-xl" x-show="mobileMenuOpen" x-cloak></i>
+                    </button>
+                </div>
+
+                <!-- Desktop Menu & Search -->
+                <div class="hidden lg:flex lg:items-center lg:justify-between lg:w-full ml-8">
+                    
+                    <!-- Navigation Links -->
+                    <ul class="flex space-x-6 items-center">
+                        <li>
+                            <a href="/" class="flex items-center gap-2 hover:text-gray-200 transition font-medium">
+                                <i class="fa-solid fa-video"></i>Home
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/movies/search" class="flex items-center gap-2 hover:text-gray-200 transition font-medium">
+                                <i class="fa-solid fa-film"></i>Search
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/comingsoon" class="flex items-center gap-2 hover:text-gray-200 transition font-medium">
+                                <i class="fa-solid fa-face-laugh-beam"></i>My Lists
+                            </a>
+                        </li>
+                        
+                        <!-- Account Dropdown with Alpine.js -->
+                        <li class="relative" x-data="{ dropdownOpen: false }">
+                            <button @click="dropdownOpen = !dropdownOpen" @click.outside="dropdownOpen = false" class="flex items-center gap-2 hover:text-gray-200 transition font-medium focus:outline-none">
+                                <i class="fa-solid fa-user"></i>My Account
+                                <i class="fa-solid fa-chevron-down text-xs ml-1" :class="dropdownOpen ? 'rotate-180' : ''" class="transition-transform duration-200"></i>
+                            </button>
+                            
+                            <!-- Dropdown Menu -->
+                            <div x-show="dropdownOpen" x-transition x-cloak class="absolute left-0 mt-3 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 text-gray-800">
+                                <div class="py-1">
+                                    <% if (userid) { %>
+                                        <a href="#" class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
+                                            <i class="fa-solid fa-circle-user text-brand"></i>
+                                            <%= username %>
+                                        </a>
+                                        <a href="#" class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
+                                            <i class="fa-solid fa-folder-open text-brand"></i>My stuff
+                                        </a>
+                                        <hr class="border-gray-200 my-1">
+                                        <a href="#" class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
+                                            <i class="fa-solid fa-user-gear text-brand"></i>Settings
+                                        </a>
+                                    <% } else { %>
+                                        <a href="/register" class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2 text-gray-500">
+                                            <i class="fa-solid fa-circle-plus"></i>Account system disabled.
+                                        </a>
+                                        <a href="/register" class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
+                                            <i class="fa-solid fa-circle-plus text-brand"></i>Register
+                                        </a>
+                                        <a href="/signin" class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
+                                            <i class="fa-solid fa-right-to-bracket text-brand"></i>Login
+                                        </a>
+                                    <% } %>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+
+                    <!-- Desktop Search Form -->
+                    <form class="flex items-center ml-4" role="search">
+                        <input class="px-3 py-1.5 rounded-l-md text-gray-900 border-none focus:outline-none focus:ring-2 focus:ring-brandDark w-64" type="search" placeholder="Search" aria-label="Search" />
+                        <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-r-md border border-green-600 transition" type="submit">Search</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Menu Panel -->
+        <div class="lg:hidden" id="mobile-menu" x-show="mobileMenuOpen" x-transition x-cloak>
+            <div class="px-2 pt-2 pb-4 space-y-1 bg-brandDark">
+                <a href="/" class="block px-3 py-2 rounded-md text-base font-medium hover:bg-[#5b78b8] flex items-center gap-2">
+                    <i class="fa-solid fa-video"></i>Home
+                </a>
+                <a href="/movies/search" class="block px-3 py-2 rounded-md text-base font-medium hover:bg-[#5b78b8] flex items-center gap-2">
+                    <i class="fa-solid fa-film"></i>Search
+                </a>
+                <a href="/comingsoon" class="block px-3 py-2 rounded-md text-base font-medium hover:bg-[#5b78b8] flex items-center gap-2">
+                    <i class="fa-solid fa-face-laugh-beam"></i>My Lists
+                </a>
+                
+                <!-- Mobile Dropdown Alternative -->
+                <div x-data="{ mobileDropdownOpen: false }">
+                    <button @click="mobileDropdownOpen = !mobileDropdownOpen" class="w-full text-left flex items-center justify-between px-3 py-2 rounded-md text-base font-medium hover:bg-[#5b78b8] focus:outline-none">
+                        <span class="flex items-center gap-2"><i class="fa-solid fa-user"></i>My Account</span>
+                        <i class="fa-solid fa-chevron-down text-xs transition-transform duration-200" :class="mobileDropdownOpen ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="mobileDropdownOpen" x-transition class="px-4 py-2 space-y-2 bg-[#5b78b8] rounded-md mt-1 mx-2">
+                        <% if (userid) { %>
+                            <a href="#" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                                <i class="fa-solid fa-circle-user"></i><%= username %>
+                            </a>
+                            <a href="#" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                                <i class="fa-solid fa-folder-open"></i>My stuff
+                            </a>
+                            <div class="border-t border-brand my-1"></div>
+                            <a href="#" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                                <i class="fa-solid fa-user-gear"></i>Settings
+                            </a>
+                        <% } else { %>
+                            <a href="/register" class="block py-1 text-sm text-gray-300 flex items-center gap-2">
+                                <i class="fa-solid fa-circle-plus"></i>Account system disabled.
+                            </a>
+                            <a href="/register" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                                <i class="fa-solid fa-circle-plus"></i>Register
+                            </a>
+                            <a href="/signin" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                                <i class="fa-solid fa-right-to-bracket"></i>Login
+                            </a>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Mobile Search Form -->
+                <form class="flex items-center px-3 mt-4" role="search">
+                    <input class="flex-1 px-3 py-2 rounded-l-md text-gray-900 border-none focus:outline-none w-full" type="search" placeholder="Search" aria-label="Search" />
+                    <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-r-md transition" type="submit">Search</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+</body>
