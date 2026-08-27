@@ -43,5 +43,13 @@ export const Files = sequelize.define("files", {
   episode: {
     type: DataTypes.INTEGER,
     allowNull: true
+  },
+  magnet: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  uuid: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4
   }
 });

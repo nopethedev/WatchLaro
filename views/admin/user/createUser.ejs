@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laro - Create User</title>
+
+</head>
+
+<body>
+    <%- include('../../header.ejs') %>
+        <div class="content">
+            <div class="w-full h-full flex justify-center items-center flex-col">
+                <a href="/admin/users" class="w-24 h-8 inline-flex items-center justify-center p-1 rounded-md bg-brand hover:scale-105 transition-all duration-150"><i data-lucide="arrow-left"></i>Go back</a>
+                <p>form redesign soon dont worry</p>
+                <form action="/api/admin/users/create" method="post" class="flex flex-col gap-2">
+                    <input class="form-input" type="text" name="username" id="username" placeholder="username">
+                    <input class="form-input" type="email" name="email" id="email" placeholder="email">
+                    <input class="form-input" type="password" name="password" id="password" placeholder="password">
+                    <select class="form-input" name="rank" id="rank">
+                        <option value="member">Member</option>
+                        <option value="manager">Manager (manage downloads)</option>
+                        <option value="admin">Admin (do everything)</option>
+                    </select>
+                    <input type="submit" value="Create user" class="p-2 rounded-md bg-brand hover:scale-110 transition-all duration-150">
+                </form>
+            </div>
+        </div>
+
+        <script>
+            lucide.createIcons();
+        </script>
+
+</body>
+
+</html>

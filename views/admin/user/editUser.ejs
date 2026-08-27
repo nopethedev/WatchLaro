@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laro - Edit User</title>
+
+</head>
+
+<body>
+    <%- include('../../header.ejs') %>
+        <div class="content">
+            <script>
+                function editUserForm() {
+                    return {
+                        uuid: window.location.pathname.split("/").pop(),
+                        form: {
+                            profilePicture: "",
+                            username: "",
+                            email: "",
+                            password: "",
+                            bio: "",
+                            rank: ""
+                        },
+                        async loadData() {
+                            const response = await fetch("/api/admin/users/info/" + this.uuid);
+
+                            const json = await response.json();
+                            this.form = json;
+                            delete this.form.password;
+                            delete this.form.uuid;
+                        },
+                        async submit() {
+                            const payload = { ...this.form }
+                            if (!payload.password) delete payload.password;
+
+                            const res = await fetch(`/api/admin/users/edit/${this.uuid}`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(payload)
+                            });
+
+                            if (res.ok) {
+                                window.location.href = `/admin/users?msg=${encodeURIComponent("Successfully edited user!")}&title=Success&type=success`;
+                            } else {
+                                console.log(await res.json());
+                            }
+                        }
+                    }
+                }
+            </script>
+            <div class="w-full h-full flex justify-center items-center flex-col">
+                <a href="/admin/users"
+                    class="w-24 h-8 inline-flex items-center justify-center p-1 rounded-md bg-brand hover:scale-105 transition-all duration-150"><i
+                        data-lucide="arrow-left"></i>Go back</a>
+                <p>form redesign soon dont worry</p>
+                <div x-data="editUserForm()" class="w-full flex flex-col items-center" x-init="loadData()">
+                    <form @submit.prevent="submit()" class="flex flex-col gap-2">
+                        <input class="form-input" type="text" x-model="form.profilePicture" placeholder="profile pic">
+                        <input class="form-input" type="text" x-model="form.username" placeholder="username">
+                        <input class="form-input" type="email" x-model="form.email" placeholder="email">
+                        <input class="form-input" type="password" x-model="form.password" placeholder="password">
+                        <textarea name="bio" id="bio" x-model="form.bio" class="text-area"></textarea>
+                        <select class="form-dropdown" name="rank" id="rank" x-model="form.rank">
+                            <option value="member">Member</option>
+                            <option value="manager">Manager (manage downloads)</option>
+                            <option value="admin">Admin (do everything)</option>
+                        </select>
+                        <input type="submit" value="Apply Changes"
+                            class="p-2 rounded-md bg-brand hover:scale-110 transition-all duration-150">
+                    </form>
+                </div>
+
+            </div>
+
+
+        </div>
+
+        <script>
+            lucide.createIcons();
+        </script>
+
+</body>
+
+</html>

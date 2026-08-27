@@ -1,7 +1,7 @@
 import { Settings } from "../database/models/Settings.js";
 
 const defaults = {
-    
+    homepageRequireAuth = true
 };
 
 const createDefaultSettings = async function () {

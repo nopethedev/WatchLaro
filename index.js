@@ -16,17 +16,12 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT;
 
-
-const tvSearchCache = new nodeCache({ stdTTL: 43200, checkperiod: 600 })
 //handlers
 
 import * as userHandler from "./handlers/usersHandler.js"
 import { profile } from "console";
 import createAdminAccount from "./handlers/createAdminAccount.js";
-//import { uploadVideo } from "./videoHandler.js/index.js";
-
-import feedRoutes from "./routes/feed.js";
-import movieRoutes from "./routes/movies.js";
+import routes from "./routes/index.js";
 
 //Init Database First
 await initDB();
@@ -56,24 +51,18 @@ app.locals.basedir = path.join(__dirname, 'views');
 
 // Middleware to set default variables for all views
 app.use((req, res, next) => {
-    res.locals.userid = req.session.userid || null;
+    res.locals.uuid = req.session.user?.uuid || null;
+    res.locals.username = req.session.user?.username || null;
+    res.locals.rank = req.session.user?.rank || null;
     next(); // Proceed to the next middleware or route handler
 });
 
 //routes
-app.use(feedRoutes);
-app.use(movieRoutes);
+routes.forEach(route => app.use(route));
 
 //Auth Middelware
 
-function checkSession(req, res, next) {
-    if (req.session.loggedin) {
-        next();
-    } else {
-        res.status(403)
-        res.render('accessdenied.ejs')
-    }
-}
+
 //routes thingy
 app.get('/', (req, res) => {
     res.render('index.ejs');
@@ -87,8 +76,8 @@ app.get('/install', (req, res) => {
     res.render('install.ejs');
 });
 
-app.get('/signin', (req, res) => {
-    res.render('signin.ejs', { error: " " }); // Add route-specific variables
+app.get('/login', (req, res) => {
+    res.render('login.ejs', { error: " " }); // Add route-specific variables
 });
 
 app.get('/register', (req, res) => {
@@ -99,16 +88,8 @@ app.get('/register', (req, res) => {
     }
 });
 
-app.get('/user/:usern', async (req, res) => {
-    const data = await userHandler.getUserDataFromusername(req.params.usern);
-    res.render('user.ejs', {
-        pfp: data.data.profilePicture || " ",
-        profileUsername: data.data.username || " ",
-        profileRank: data.data.rank || " ",
-        profileBio: data.data.bio || " ",
-        error: data.error_msg,
-        profileFollowers: data.data.followers || "0"
-    });
+app.get('/profile/:username', async (req, res) => {
+    res.render("profile.ejs");
 });
 
 //movies
@@ -138,95 +119,6 @@ app.get('/tv/:id/:season/:episode', async (req, res) => {
     res.render(path.join(__dirname, "views", "tv", "watch.ejs"), { embed: "https://de.laro.voidcities.xyz/tv/embedv2?id=" + req.params.id + "&season=" + req.params.season + "&episode=" + req.params.episode })
 })
 //apis
-
-app.post("/register", async (req, res) => {
-    const { username, password, email, "h-captcha-response": token } = req.body;
-    const response = await userHandler.registerUser(username, password, email, token);
-
-    if (!response.error) {
-        res.render('register.ejs', { error: "You have successfully registered your account! Head to the sign-in page to log in." });
-    } else {
-        res.render('register.ejs', { error: response.error_msg });
-    }
-});
-
-app.post("/signin", async (req, res) => {
-    const { username, password } = req.body;
-    const response = await userHandler.loginUser(username, password);
-
-    if (response.success && !response.error) {
-        req.session.username
-        res.redirect("/user/" + username);
-    } else {
-        res.render('signin.ejs', { error: response.error_msg });
-    }
-});
-
-//APIS
-
-app.post("/api/tv/search", async (req, res) => {
-    const getCache = tvSearchCache.get(req.body.q)
-    if (!getCache) {
-        let response = await axios.get('https://api.themoviedb.org/3/search/tv', {
-            headers: {
-                Authorization: `Bearer ${process.env.TMDB_KEY}`
-            },
-            params: {
-                query: req.body.q,
-                api_key: process.env.TMDB_KEY
-            }
-        });
-        tvSearchCache.set(req.body.q, response.data)
-        res.json(response.data)
-    } else {
-        res.json(getCache)
-    }
-
-
-});
-
-//also returns season info.
-app.post("/api/tv/info", async (req, res) => {
-    const query = req.body.q
-    const getCache = movieDataCache.get(toString("tv" + query))
-    if (!getCache) {
-        try {
-            let response = await axios.get("https://api.themoviedb.org/3/tv/" + Number(query), {
-                headers: { Authorization: "Bearer " + process.env.TMDB_KEY, "Content-Type": "application/json" }
-            })
-            movieDataCache.set("tv" + query, response.data)
-            return res.json(response.data)
-        } catch (err) {
-            return res.status(500)
-        }
-
-    } else {
-        return res.json(getCache)
-    }
-})
-
-app.post("/api/tv/season/info", async (req, res) => {
-    const query = req.body.q
-    const season = req.body.season
-    const getCache = movieDataCache.get(toString("tv" + "S" + season + query))
-    if (!getCache) {
-        try {
-            let response = await axios.get("https://api.themoviedb.org/3/tv/" + Number(query) + "/season/" + Number(season), {
-                headers: { Authorization: "Bearer " + process.env.TMDB_KEY, "Content-Type": "application/json" }
-            })
-            movieDataCache.set("tv" + "S" + season + query, response.data)
-            return res.json(response.data)
-        } catch (err) {
-            return res.status(500)
-        }
-
-    } else {
-        return res.json(getCache)
-    }
-})
-
-
-//apis that need session
 
 
 

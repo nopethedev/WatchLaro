@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laro - Login</title>
+
+</head>
+
+<body>
+    <%- include('header.ejs') %>
+        <div class="content">
+            <div class="w-full justify-items-center">
+                <div class="w-100 h-52 bg-gray-900 mt-4 rounded-md justify-items-center p-4">
+                    <form action="/login" method="post" class="w-full h-full ">
+                        <div class="w-full h-full flex items-center flex-col">
+                            <h1 x-data="{ greetings: ['👋 Welcome back!', '🍿 Grab some popcorn!', '🎬 Ready to watch?', '🚀 Login to start.'] }"
+                                x-text="greetings[Math.floor(Math.random() * greetings.length)]"
+                                class="font-bold text-2xl">
+                            </h1>
+                            <input type="text" name="username" id="username" class="form-input"
+                                placeholder="👤 Username" required>
+                            <input type="password" name="password" id="password" placeholder="🔑 Password" required
+                                class="form-input">
+                            <center> <button type="submit"
+                                    class="w-72 h-8 rounded-xl bg-brand mt-4 hover:scale-105 transition-all duration-150">Login</button>
+                            </center>
+                        </div>
+
+                        <p>
+                            <%= error %>
+                        </p>
+                </div>
+
+                </form>
+            </div>
+
+
+
+        </div>
+
+</body>
+
+</html>

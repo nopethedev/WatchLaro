@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laro - Create User</title>
+
+</head>
+
+<body>
+    <%- include('../../header.ejs') %>
+        <script>
+            function searchMovie() {
+                return {
+                    movies: [],
+                    torrents: [],
+                    searchQuery: "",
+                    loading: false,
+                    showMovieSearch: true,
+                    showTorrentSearch: false,
+                    selectedMovie: "",
+                    searchForMovie: async function () {
+                        this.loading = true
+                        const response = await fetch("/api/admin/movie/search?q=" + encodeURIComponent(this.searchQuery));
+                        const json = await response.json();
+                        console.log(json)
+                        this.loading = false
+                        this.movies = json
+                        this.$nextTick(() => {
+                            lucide.createIcons();
+                        });
+                    },
+                    selectMovie: async function (movieName = null) {
+                        console.log(movieName)
+                        if (!movieName) {
+                            movieName = this.searchQuery
+                        }
+                        this.selectedMovie = movieName
+                        this.searchQuery = movieName
+                        this.showMovieSearch = false
+                        this.loading = true
+                        const response = await fetch("/api/admin/torrent/search?q=" + encodeURIComponent(movieName));
+                        const json = await response.json();
+                        this.$nextTick(() => {
+                            lucide.createIcons();
+                        });
+                        console.log(json)
+                        this.loading = false
+                        this.torrents = json
+                        this.showTorrentSearch = true
+
+
+                    },
+                    selectTorrent: async function (torrent) {
+                        console.log(torrent)
+                        console.log(this.movies.find(x => x.title === this.selectedMovie)?.id)
+                        const response = await fetch("/api/admin/torrent/create", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({
+                                magnet: torrent,
+                                tmdbId: this.movies.find(x => x.name === this.selectedMovie)?.id
+                            })
+                        });
+                    }
+                }
+            }
+        </script>
+        <div class="content">
+            <div class="w-full h-full flex justify-center items-center flex-col">
+                <a href="/admin/media"
+                    class="w-24 h-8 inline-flex items-center justify-center p-1 rounded-md bg-brand hover:scale-105 transition-all duration-150"><i
+                        data-lucide="arrow-left"></i>Go back</a>
+                <div class="flex flex-col items-center mt-4" x-data="searchMovie()">
+                    <span class="loading loading-spinner loading-lg" x-show="loading"></span>
+                    <span x-show="loading">May take up to 30 seconds. Please wait.</span>
+                    <div x-show="showMovieSearch" class="flex flex-col items-center">
+                        <input type="text" class="form-input" @input.debounce.1000ms="searchForMovie()"
+                            x-model="searchQuery" placeholder="Search for a movie..">
+                        <div
+                            class="md:w-xl sm:w-full max-h-64 overflow-y-scroll grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-2">
+                            <template x-for="movie in movies" :key="movie.id">
+                                <button class="w-18 h-32 rounded-md hover:scale-105 duration-150"
+                                    @click="selectMovie(movie.title)">
+                                    <img class="w-full h-full rounded-md"
+                                        :src="`https://image.tmdb.org/t/p/w500${movie.poster_path}`" alt="">
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                    <div x-show="showTorrentSearch" class="flex flex-col items-center">
+                        <input type="text" class="form-input" @input.debounce.1000ms="selectMovie()"
+                            x-model="searchQuery" placeholder="Search for a movie..">
+                        <div class="md:w-xl sm:w-full max-h-64 overflow-y-scroll flex flex-col gap-2 p-2">
+                            <template x-for="torrent in torrents" :key="torrent.magnet">
+                                <div @click="selectTorrent(torrent.magnet)"
+                                    class="w-full bg-gray-800 rounded-md flex flex-row gap-2 text-sm hover:scale-95 duration-150 transition-transform">
+                                    <h1 class="users-list-text-with-icon text-bold"><i data-lucide="sprout"></i> <span
+                                            x-text="torrent.seeders"></span></h1>
+                                    <h1 class="users-list-text-with-icon"><i data-lucide="weight-tilde"></i> <span
+                                            x-text="torrent.size"></span></h1>
+                                    <h1 class="users-list-text-with-icon"><i data-lucide="folder"></i> <span
+                                            x-text="torrent.title"></span></h1>
+                                </div>
+
+                            </template>
+                        </div>
+                    </div>
+
+                </div>
+                <form action="/api/admin/users/create" method="post" class="flex flex-col gap-2 hidden">
+                    <input class="form-input" type="text" name="username" id="username" placeholder="username">
+                    <input class="form-input" type="email" name="email" id="email" placeholder="email">
+                    <input class="form-input" type="password" name="password" id="password" placeholder="password">
+                    <select class="form-input" name="rank" id="rank">
+                        <option value="member">Member</option>
+                        <option value="manager">Manager (manage downloads)</option>
+                        <option value="admin">Admin (do everything)</option>
+                    </select>
+                    <input type="submit" value="Create user"
+                        class="p-2 rounded-md bg-brand hover:scale-110 transition-all duration-150">
+                </form>
+            </div>
+        </div>
+
+        <script>
+            lucide.createIcons();
+        </script>
+
+</body>
+
+</html>
