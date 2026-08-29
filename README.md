@@ -2,6 +2,8 @@
 
 A self-hostable alternative to Jellyfin, built around downloading and sharing media instead of just streaming from a static library. Written in EJS and Javascript using MariaDB as database.
 
+![WatchLaro Screenshot](https://cdn.voidhosting.vip/s/9Bv0HMBC)
+
 > ⚠️ **Alpha Software**
 > WatchLaro is in early alpha. Most planned features are **not implemented yet** — only the bare essentials currently work. Expect bugs, missing functionality, and breaking changes between updates. Not recommended for production use yet.
 
