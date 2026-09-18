@@ -25,7 +25,7 @@ export const Files = sequelize.define("files", {
     allowNull: false
   },
   status: {
-    type: DataTypes.ENUM("unknown", "downloading", "transcoding", "done", "failed"),
+    type: DataTypes.ENUM("unknown", "downloading", "paused", "transcoding", "done", "failed"),
     defaultValue: "unknown" //unknown, downloading, transcoding, available
   },
   createdAt: {
@@ -47,6 +47,11 @@ export const Files = sequelize.define("files", {
   magnet: {
     type: DataTypes.TEXT,
     allowNull: false
+  },
+  shareCode: {
+    type: DataTypes.STRING(8),
+    unique: true,
+    allowNull: true
   },
   uuid: {
     type: DataTypes.UUID,

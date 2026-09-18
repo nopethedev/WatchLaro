@@ -27,6 +27,143 @@
                             this.loading = false;
                             this.files = json.files;
 
+                            this.loadArtwork();
+                            this.pollProgress();
+
+                            this.$nextTick(() => {
+                                lucide.createIcons();
+                            });
+                        },
+                        // Percentage used to drive the artwork reveal (0-100)
+                        percent: function (file) {
+                            if (file.status === "done") return 100;
+                            return Math.max(0, Math.min(100, Number(file.progress) || 0));
+                        },
+                        // Reveal the coloured artwork left -> right. clip-path is used
+                        // instead of a width change so the background image never gets
+                        // squeezed, and unlike mask-image it animates reliably.
+                        revealStyle: function (file) {
+                            const pct = this.percent(file);
+                            return `clip-path: inset(0 ${100 - pct}% 0 0); -webkit-clip-path: inset(0 ${100 - pct}% 0 0);`;
+                        },
+                        artworkUrl: function (file) {
+                            return file.artwork ? `https://image.tmdb.org/t/p/w780${file.artwork}` : null;
+                        },
+                        // Pull backdrop/poster art from TMDB for every row
+                        loadArtwork: async function () {
+                            await Promise.all(this.files.map(async file => {
+                                if (!file.linkedId) return;
+                                try {
+                                    const endpoint = file.type === "tv" ? "/api/tv/info" : "/api/movies/info";
+                                    const response = await fetch(endpoint, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ q: file.linkedId })
+                                    });
+                                    if (!response.ok) return;
+                                    const data = await response.json();
+                                    file.artwork = data.backdrop_path || data.poster_path || null;
+                                } catch (err) {
+                                    // no artwork, row just stays plain
+                                }
+                            }));
+                        },
+                        // Keep the reveal animating while downloads are running
+                        pollProgress: function () {
+                            setInterval(async () => {
+                                const active = this.files.filter(f => f.status === "downloading" && f.torrentHash);
+                                await Promise.all(active.map(async file => {
+                                    try {
+                                        const response = await fetch(`/api/admin/torrent/progress?hash=${file.torrentHash}`);
+                                        const stats = await response.json();
+                                        if (stats && stats.progress !== undefined) {
+                                            file.progress = Number(stats.progress);
+                                        }
+                                    } catch (err) {
+                                        // ignore, try again next tick
+                                    }
+                                }));
+                            }, 2000);
+                        },
+                        togglePause: async function (file) {
+                            const action = file.status === "paused" ? "resume" : "pause";
+                            const response = await fetch(`/api/admin/files/${file.uuid}/${action}`, { method: "POST" });
+                            const json = await response.json();
+
+                            if (!response.ok || !json.success) {
+                                Swal.fire({ title: "Error", text: json.error || "Could not update download", icon: "error" });
+                                return;
+                            }
+
+                            file.status = json.status;
+                            this.$nextTick(() => {
+                                lucide.createIcons();
+                            });
+                        },
+                        skipToConvert: async function (file) {
+                            const response = await fetch(`/api/admin/files/${file.uuid}/skip`, { method: "POST" });
+                            const json = await response.json();
+
+                            if (!response.ok || !json.success) {
+                                Swal.fire({ title: "Error", text: json.error || "Could not skip to transcoding", icon: "error" });
+                                return;
+                            }
+
+                            file.status = json.status;
+                            this.$nextTick(() => {
+                                lucide.createIcons();
+                            });
+                        },
+                        shareMedia: async function (file) {
+                            const response = await fetch(`/api/admin/files/${file.uuid}/share`, { method: "POST" });
+                            const json = await response.json();
+
+                            if (!response.ok || !json.success) {
+                                Swal.fire({ title: "Error", text: json.error || "Could not create share link", icon: "error" });
+                                return;
+                            }
+
+                            if (navigator.clipboard) {
+                                navigator.clipboard.writeText(json.url).catch(() => { });
+                            }
+
+                            Swal.fire({
+                                title: "Share link (" + json.code + ")",
+                                input: "text",
+                                inputValue: json.url,
+                                showCancelButton: true,
+                                confirmButtonText: "Copy link",
+                                cancelButtonText: "Close",
+                                didOpen: () => {
+                                    if (navigator.clipboard) navigator.clipboard.writeText(json.url);
+                                }
+                            }).then((result) => {
+                                if (result.isConfirmed && navigator.clipboard) {
+                                    navigator.clipboard.writeText(json.url);
+                                }
+                            });
+                        },
+                        deleteMedia: async function (file) {
+                            const confirmed = await Swal.fire({
+                                title: "Delete this media?",
+                                text: `"${file.name}" will be removed permanently.`,
+                                icon: "warning",
+                                showCancelButton: true,
+                                confirmButtonText: "Delete",
+                                confirmButtonColor: "#dc2626"
+                            });
+
+                            if (!confirmed.isConfirmed) return;
+
+                            const response = await fetch(`/api/admin/files/${file.uuid}`, { method: "DELETE" });
+                            const json = await response.json();
+
+                            if (!response.ok || !json.success) {
+                                Swal.fire({ title: "Error", text: json.error || "Could not delete media", icon: "error" });
+                                return;
+                            }
+
+                            this.files = this.files.filter(f => f.uuid !== file.uuid);
                             this.$nextTick(() => {
                                 lucide.createIcons();
                             });
@@ -69,18 +206,72 @@
                                     class="loading loading-spinner loading-lg"></span> Loading media...</h1>
                             <template x-for="file in files" :key="file.uuid">
                                 <div
-                                    class="w-full h-8 bg-slate-800 mt-2 rounded-md p-1 flex flex-row gap-4 animate-fade-up">
-                                    <h2 class="users-list-text-with-icon font-bold"><img :src="file.name"
-                                            class="rounded-full w-6 h-6" alt=""><span x-text="file.name"></span>
-                                    </h2>
-                                    <h2 class="users-list-text-with-icon"> <i data-lucide="menu"></i><span
-                                            x-text="file.quality"></span></h2>
-                                    <h2 class="users-list-text-with-icon"> <i data-lucide="shield-half"></i><span
-                                            x-text="file.status + file.progress || 0"></span></h2>
-                                    <h2 class="users-list-text-with-icon hidden md:block lg:block"> <i
-                                            data-lucide="info"></i><span x-text="file.uuid"></span></h2>
-                                    <a class="ml-auto bg-brand w-24 h-6 rounded-md hover:scale-105 duration-150 transition-all text-center "
-                                        :href="`/admin/users/edit/${file.uuid}`">Edit Media</a>
+                                    class="relative w-full min-h-12 bg-slate-800 mt-2 rounded-md overflow-hidden animate-fade-up">
+
+                                    <!-- artowkr gray -->
+                                    <div x-show="artworkUrl(file)"
+                                        class="absolute inset-0 bg-cover bg-center"
+                                        :style="`background-image: url('${artworkUrl(file)}'); filter: grayscale(1) brightness(0.35);`"></div>
+
+                                    <!-- artwork with color -->
+                                    <div x-show="artworkUrl(file)"
+                                        class="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out"
+                                        :style="`background-image: url('${artworkUrl(file)}'); filter: brightness(0.6); ${revealStyle(file)}`">
+                                    </div>
+
+                                    <!-- fallback -->
+                                    <div x-show="!artworkUrl(file) && percent(file) > 0"
+                                        class="absolute inset-y-0 left-0 transition-all duration-700 ease-out"
+                                        :style="`width: ${percent(file)}%; background: linear-gradient(to right, rgba(59,130,246,0.15), rgba(59,130,246,0.55));`">
+                                    </div>
+
+                                    <!-- glowing edge ai said -->
+                                    <div x-show="percent(file) > 0 && percent(file) < 100"
+                                        class="absolute inset-y-0 w-px transition-all duration-700 ease-out"
+                                        :style="`left: ${percent(file)}%; background: rgba(255,255,255,0.75); box-shadow: 0 0 8px 2px rgba(255,255,255,0.35);`">
+                                    </div>
+
+                                    <!-- readable thingy  -->
+                                    <div x-show="artworkUrl(file)"
+                                        class="absolute inset-0 bg-gradient-to-r from-slate-900/80 to-slate-900/20"></div>
+
+                                    <div class="relative z-10 h-full p-1 flex flex-row gap-2 items-center">
+                                        <h2 class="users-list-text-with-icon font-bold"><span
+                                                x-text="file.name"></span>
+                                        </h2>
+                                        <h2 class="users-list-text-with-icon"> <i data-lucide="menu"></i><span
+                                                x-text="file.quality"></span></h2>
+                                        <h2 class="users-list-text-with-icon"> <i data-lucide="shield-half"></i><span
+                                                x-text="file.status === 'downloading' ? `${file.status} ${percent(file).toFixed(1)}%` : file.status"></span>
+                                        </h2>
+                                        <h2 class="users-list-text-with-icon hidden md:block lg:block"> <i
+                                                data-lucide="info"></i><span x-text="file.uuid"></span></h2>
+                                        <a class="ml-auto bg-brand w-8 h-8 p-1 rounded-md hover:scale-105 duration-150 transition-all items-center "
+                                            :href="`/admin/users/edit/${file.uuid}`"><i data-lucide="pencil"></i></a>
+                                        <button type="button"
+                                            x-show="file.status === 'downloading'"
+                                            title="Skip to transcoding"
+                                            class="bg-sky-600 w-8 h-8 p-1 rounded-sm hover:scale-105 duration-150 transition-all items-center"
+                                            @click="skipToConvert(file)">
+                                            <i data-lucide="fast-forward"></i>
+                                        </button>
+                                        <button type="button"
+                                            x-show="file.status === 'done'"
+                                            title="Share"
+                                            class="bg-emerald-600 w-8 h-8 p-1 rounded-sm hover:scale-105 duration-150 transition-all items-center"
+                                            @click="shareMedia(file)">
+                                            <i data-lucide="share-2"></i>
+                                        </button>
+                                        <button type="button"
+                                            x-show="file.status === 'downloading' || file.status === 'paused'"
+                                            class="bg-amber-600 w-8 h-8 p-1 rounded-sm hover:scale-105 duration-150 transition-all items-center"
+                                            @click="togglePause(file)">
+                                            <i :data-lucide="file.status === 'paused' ? 'play' : 'pause'"></i>
+                                        </button>
+                                        <button type="button"
+                                            class="bg-red-600 w-8 h-8 p-1 rounded-sm hover:scale-105 duration-150 transition-all items-center"
+                                            @click="deleteMedia(file)"><i data-lucide="trash"></i></button>
+                                    </div>
                                 </div>
                             </template>
                         </div>

@@ -18,6 +18,8 @@ export class TorrentHelper {
   constructor(options = {}) {
     this.client = new WebTorrent(options.webtorrent);
     this.activeDownloads = new Map();
+    // Pending waitForDone finish callbacks per infoHash, used by requestSkip()
+    this._waiters = new Map();
     // Cache search results for 12 hours (432000 seconds) by default
     this.cache = new nodeCache({ stdTTL: options.cacheTtl || 432000, checkperiod: 600 });
 
@@ -76,7 +78,7 @@ export class TorrentHelper {
 
         // If magnet link points to itorrents.net HTTP torrent file, convert infohash if present
         if (magnet && magnet.includes('itorrents.net/torrent/')) {
-          const match = magnet.match(/\/torrent\/([A-Fa0-8]{40})\.torrent/i);
+          const match = magnet.match(/\/torrent\/([A-Fa-f0-9]{40})\.torrent/i);
           if (match && match[1]) {
             magnet = `magnet:?xt=urn:btih:${match[1]}`;
           }
@@ -139,20 +141,31 @@ export class TorrentHelper {
   download(torrentId, options = {}, onProgress = null) {
     return new Promise((resolve, reject) => {
       try {
-        const { onlyVideo = true, path = "../../../downloads", ...webtorrentOpts } = options;
+        // Rename on destructure so the imported `path` module stays usable here
+        const { onlyVideo = true, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
 
-        const torrent = this.client.add(torrentId, webtorrentOpts, (addedTorrent) => {
+        const torrent = this.client.add(torrentId, { ...webtorrentOpts, path: downloadPath }, (addedTorrent) => {
           this.activeDownloads.set(addedTorrent.infoHash, addedTorrent);
+
+          // Prevent seeding: choke every peer so we never upload pieces to them,
+          // both while downloading and after the torrent completes.
+          const chokeWire = (wire) => wire.choke();
+          addedTorrent.wires.forEach(chokeWire);
+          addedTorrent.on('wire', chokeWire);
 
           // Select only video files if requested (deselects samples, NFOs, txt, extra junk)
           if (onlyVideo) {
+            // Deselect junk first, then select video: a deselect that overlaps
+            // a shared piece would otherwise drop the video's selection for it
+            const videoFiles = [];
             addedTorrent.files.forEach((file) => {
               if (this.isVideoFile(file.name)) {
-                file.select();
+                videoFiles.push(file);
               } else {
                 file.deselect();
               }
             });
+            videoFiles.forEach((file) => file.select());
           }
 
           // Setup progress updates if listener callback provided
@@ -183,9 +196,12 @@ export class TorrentHelper {
   }
 
   /**
-   * Waits for an active torrent download to reach 100% completion.
+   * Waits for a torrent's video files to finish downloading.
+   * Note: WebTorrent's 'done' event only fires when EVERY file is complete,
+   * including deselected junk files (samples, NFOs) that will never download.
+   * So we resolve once all video files are done instead.
    * @param {string|Object} torrentOrHash - WebTorrent instance or infoHash string.
-   * @returns {Promise<Object>} Resolves with the completed torrent instance when done.
+   * @returns {Promise<Object>} Resolves with the torrent instance when done.
    */
   waitForDone(torrentOrHash) {
     const torrent = typeof torrentOrHash === 'string'
@@ -200,10 +216,59 @@ export class TorrentHelper {
       return Promise.resolve(torrent);
     }
 
+    const videoFiles = (torrent.files || []).filter((file) => this.isVideoFile(file.name));
+    const pending = videoFiles.filter((file) => !file.done);
+
+    // All video files already completed
+    if (videoFiles.length > 0 && pending.length === 0) {
+      return Promise.resolve(torrent);
+    }
+
     return new Promise((resolve, reject) => {
-      torrent.once('done', () => resolve(torrent));
-      torrent.once('error', (err) => reject(err));
+      let remaining = pending.length;
+      let settled = false;
+
+      const cleanup = () => {
+        this._waiters.delete(torrent.infoHash);
+        torrent.removeListener('done', onTorrentDone);
+        torrent.removeListener('error', onError);
+        pending.forEach((file) => file.removeListener('done', onFileDone));
+      };
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(torrent);
+      };
+      const onTorrentDone = () => finish();
+      const onError = (err) => {
+        cleanup();
+        reject(err);
+      };
+      const onFileDone = () => {
+        remaining -= 1;
+        if (remaining <= 0) finish();
+      };
+
+      this._waiters.set(torrent.infoHash, finish);
+      torrent.once('done', onTorrentDone);
+      torrent.once('error', onError);
+      pending.forEach((file) => file.once('done', onFileDone));
     });
+  }
+
+  /**
+   * Skips waiting for a torrent to finish downloading. The pending
+   * downloadAndConvert job continues straight to conversion using the data
+   * downloaded so far (useful when a download is stuck just below 100%).
+   * @param {string} infoHash - Infohash of the torrent to skip.
+   * @returns {boolean} True if a pending job was told to skip.
+   */
+  requestSkip(infoHash) {
+    const finish = infoHash && this._waiters.get(infoHash);
+    if (!finish) return false;
+    finish();
+    return true;
   }
 
   /**
@@ -234,12 +299,31 @@ export class TorrentHelper {
       }
     );
 
-    // 2. Wait until download is 100% complete
+    // 2. Metadata is available as soon as the torrent is added — notify the
+    // caller so it can persist the real name, path and infoHash.
+    if (typeof options.onReady === 'function') {
+      const readyVideoFiles = torrent.files
+        .filter((file) => this.isVideoFile(file.name))
+        .sort((a, b) => b.length - a.length);
+      const readyVideoFile = readyVideoFiles[0] || torrent.files[0] || null;
+
+      try {
+        await options.onReady({
+          torrent,
+          videoFile: readyVideoFile,
+          outputPath: readyVideoFile ? path.join(downloadDir, readyVideoFile.path) : downloadDir
+        });
+      } catch (err) {
+        console.error('onReady handler failed:', err);
+      }
+    }
+
+    // 3. Wait until download is 100% complete
     if (!torrent.done) {
       await this.waitForDone(torrent);
     }
 
-    // 3. Find video files and select the largest one
+    // 4. Find video files and select the largest one
     const videoFiles = torrent.files.filter((file) => this.isVideoFile(file.name));
 
     if (videoFiles.length === 0) {
@@ -249,7 +333,7 @@ export class TorrentHelper {
     videoFiles.sort((a, b) => b.length - a.length);
     const mainVideoFile = videoFiles[0];
 
-    // 4. Resolve input file path
+    // 5. Resolve input file path
     const inputPath = path.join(downloadDir, mainVideoFile.path);
 
     // If conversion is disabled, return downloaded file path directly
@@ -265,7 +349,7 @@ export class TorrentHelper {
 
     const targetOutput = options.outputPath || path.join(downloadDir, `converted_${path.parse(mainVideoFile.name).name}.mp4`);
 
-    // 5. Smart conversion (probes codecs and transcodes only if required)
+    // 6. Smart conversion (probes codecs and transcodes only if required)
     const convertedPath = await this.convertAUTO(
       inputPath,
       targetOutput,
@@ -298,17 +382,30 @@ export class TorrentHelper {
       return null;
     }
 
+    // Measure progress over the video files only. torrent.progress includes
+    // deselected junk files (samples, NFOs) that never download, which made
+    // the UI stall just below 100%.
+    const videoFiles = (torrent.files || []).filter((file) => this.isVideoFile(file.name));
+    const files = videoFiles.length > 0 ? videoFiles : (torrent.files || []);
+
+    let progress = torrent.progress * 100;
+    if (files.length > 0) {
+      const totalBytes = files.reduce((sum, file) => sum + file.length, 0);
+      const downloadedBytes = files.reduce((sum, file) => sum + file.downloaded, 0);
+      progress = totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : 0;
+    }
+
     return {
       infoHash: torrent.infoHash,
       name: torrent.name,
-      progress: (torrent.progress * 100).toFixed(2), // Percentage 0-100%
+      progress: Math.min(progress, 100).toFixed(2), // Percentage 0-100%
       downloadSpeed: torrent.downloadSpeed, // Bytes/sec
       uploadSpeed: torrent.uploadSpeed, // Bytes/sec
       numPeers: torrent.numPeers,
       downloaded: torrent.downloaded,
       total: torrent.length,
       timeRemaining: torrent.timeRemaining, // ms
-      isDone: torrent.done
+      isDone: torrent.done || (videoFiles.length > 0 && videoFiles.every((file) => file.done))
     };
   }
 
@@ -318,6 +415,47 @@ export class TorrentHelper {
    */
   getAllProgress() {
     return Array.from(this.activeDownloads.keys()).map((hash) => this.getProgress(hash));
+  }
+
+  /**
+   * Pauses an active download by deselecting its files, halting piece requests
+   * without dropping the torrent from the client.
+   * @param {string} infoHash - Infohash of the torrent to pause.
+   * @returns {boolean} True if the torrent was found and paused.
+   */
+  pause(infoHash) {
+    const torrent = this.activeDownloads.get(infoHash);
+    if (!torrent || !torrent.files) {
+      return false;
+    }
+
+    torrent.files.forEach((file) => file.deselect());
+    if (typeof torrent.deselect === 'function') {
+      // Clear the whole-torrent selection added by WebTorrent on add()
+      torrent.deselect(0, torrent.pieces.length - 1, false);
+    }
+    torrent._laroPaused = true;
+    return true;
+  }
+
+  /**
+   * Resumes a paused download by re-selecting its video files.
+   * @param {string} infoHash - Infohash of the torrent to resume.
+   * @returns {boolean} True if the torrent was found and resumed.
+   */
+  resume(infoHash) {
+    const torrent = this.activeDownloads.get(infoHash);
+    if (!torrent || !torrent.files) {
+      return false;
+    }
+
+    torrent.files.forEach((file) => {
+      if (this.isVideoFile(file.name)) {
+        file.select();
+      }
+    });
+    torrent._laroPaused = false;
+    return true;
   }
 
   /**
@@ -452,7 +590,9 @@ export class TorrentHelper {
 
       // Faststart flag allows web streaming before full download of file
       if (outputPath.endsWith('.mp4')) {
-        command = command.outputOptions('-movflags +faststart');
+        // Subtitle tracks (e.g. PGS/ASS from MKV) are not muxable into MP4 and
+        // would abort the whole job, so drop them; video/audio stay untouched.
+        command = command.outputOptions(['-movflags +faststart', '-sn']);
       }
 
       if (options.preset) {
