@@ -12,8 +12,7 @@ export default async function(){
             email: "example@example.com",
             password: pass,
             bio: "An admin or somehting idk",
-            rank: "admin",
-            userid: crypto.randomUUID()
+            rank: "admin"
         });
 
         console.log("Created default admin account. U can login using admin and Admin123!")

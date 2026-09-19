@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laro - Admin Settings</title>
+
+</head>
+
+<body>
+    <div class="flex flex-col min-h-screen">
+        <%- include('../header.ejs') %>
+
+            <div class="flex flex-1">
+                <%- include('sidebar.ejs') %>
+                    <div class="flex-1 bg-slate-950">
+                        <h1
+                            class="text-4xl font-black bg-linear-to-b from-brand to-cyan-300 bg-clip-text text-transparent">
+                            Welcome
+                            to Laro</h1>
+                    </div>
+            </div>
+    </div>
+
+</body>
+
+</html>

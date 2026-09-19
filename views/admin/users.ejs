@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laro - Manage Users</title>
+
+</head>
+
+<body>
+    <div class="flex flex-col min-h-screen">
+        <%- include('../header.ejs') %>
+            <script>
+                function userList() {
+                    return {
+                        users: [],
+                        loading: true,
+                        initUsers: async function () {
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            const response = await fetch("/api/admin/users");
+
+                            const json = await response.json();
+                            console.log(json)
+                            this.loading = false;
+                            this.users = json.users;
+
+                            this.$nextTick(() => {
+                                lucide.createIcons();
+                            });
+                        }
+                    }
+                }
+
+                // success alert etc etc
+                const params = new URLSearchParams(window.location.search)
+
+                const msg = params.get("msg")
+                if (msg) {
+                    Swal.fire({
+                        title: params.get("title"),
+                        text: msg,
+                        icon: params.get("type")
+                    });
+                }
+            </script>
+
+            <div class="flex flex-1">
+                <%- include('sidebar.ejs') %>
+                    <div class="sidebar-content">
+                        <h1 class="text-xl font-bold">User List</h1>
+                        <div
+                            class="w-full rounded-md p-2 lg:w-[95%] md:w-[95%] mt-2 bg-slate-900 h-[90%] flex flex-col">
+                            <div class="w-full bg-gray-800 h-8 flex flex-row rounded-md p-1">
+                                <div class="w-64 bg-gray-700 rounded-md">
+                                    Search coming soon
+                                </div>
+                                <a href="./users/create"
+                                    class="bg-brand ml-auto h-6 w-32 p-1 rounded-md flex flex-row items-center justify-center"><i
+                                        data-lucide="user-plus"></i><span>New User</span></a>
+                            </div>
+                            <div class="flex-1 overflow-auto" x-data="userList()" x-init="initUsers()">
+                                <h1 x-show="loading" class="w-full text-center mt-5"><span
+                                        class="loading loading-spinner loading-lg"></span> Loading users...</h1>
+                                <template x-for="user in users" :key="user.uuid">
+                                    <div
+                                        class="w-full h-8 bg-slate-800 mt-2 rounded-md p-1 flex flex-row gap-4 animate-fade-up">
+                                        <h2 class="users-list-text-with-icon font-bold"><img :src="user.profilePicture"
+                                                class="rounded-full w-6 h-6" alt=""><span x-text="user.username"></span>
+                                        </h2>
+                                        <h2 class="users-list-text-with-icon"> <i data-lucide="menu"></i><span
+                                                x-text="user.email"></span></h2>
+                                        <h2 class="users-list-text-with-icon"> <i data-lucide="shield-half"></i><span
+                                                x-text="user.rank"></span></h2>
+                                        <h2 class="users-list-text-with-icon hidden md:block lg:block"> <i
+                                                data-lucide="info"></i><span x-text="user.uuid"></span></h2>
+                                        <a class="ml-auto bg-brand w-24 h-6 rounded-md hover:scale-105 duration-150 transition-all text-center "
+                                            :href="`/admin/users/edit/${user.uuid}`">Edit User</a>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+
+</body>
+
+</html>
