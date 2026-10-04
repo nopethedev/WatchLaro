@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        /* Only what Tailwind utilities cannot express. */
+        html, body { height: 100%; margin: 0; background: #020617; overflow: hidden; }
+
+        /* Tailwind sets display on .flex/.block, which beats the UA [hidden] rule. */
+        [hidden] { display: none !important; }
+
+        #wl-video { object-fit: contain; }
+
+        #wl-popcorn { animation: wl-bounce 1.4s ease-in-out infinite; }
+        #wl-overlay.is-error #wl-popcorn { animation: none; filter: grayscale(1); opacity: .45; }
+
+        @keyframes wl-bounce {
+            0%, 100% { transform: translateY(0) rotate(-6deg); }
+            50% { transform: translateY(-10px) rotate(6deg); }
+        }
+
+        #wl-bar.is-indeterminate { width: 40%; animation: wl-slide 1.2s ease-in-out infinite; }
+        @keyframes wl-slide {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(250%); }
+        }
+
+        #wl-topbar { opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+        #wl-player:hover #wl-topbar, #wl-topbar.is-embedded { opacity: 1; pointer-events: auto; }
+    </style>
+</head>
+
+<body>
+    <div id="wl-player" class="group relative w-full h-full bg-black select-none">
+        <video id="wl-video" class="block w-full h-full bg-black" playsinline preload="metadata" controls></video>
+
+        <!-- title + download, revealed on hover (or always when embedded) -->
+        <div id="wl-topbar"
+            class="absolute top-0 inset-x-0 z-10 flex items-center justify-between gap-3 px-3 py-2.5 bg-gradient-to-b from-slate-950/90 to-transparent">
+            <span id="wl-badge" class="text-sm font-semibold text-slate-200 truncate"></span>
+            <div class="flex items-center gap-2 shrink-0">
+                <button id="wl-download" type="button"
+                    class="bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-default text-white text-xs font-semibold px-3 py-1.5 rounded-md transition-colors">
+                    Download
+                </button>
+                <button id="wl-reload" type="button"
+                    class="bg-blue-700/20 hover:bg-blue-500/40 border border-blue-700 text-blue-100 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors">
+                    Restart
+                </button>
+            </div>
+        </div>
+
+        <!-- popcorn / progress / error state -->
+        <div id="wl-overlay"
+            class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 p-6 text-center bg-slate-950/95">
+            <div id="wl-popcorn" class="text-6xl leading-none">&#127871;</div>
+
+            <div>
+                <p id="wl-heading" class="text-lg font-bold text-white m-0">Grabbing popcorn&hellip;</p>
+                <p id="wl-sub" class="text-sm text-slate-400 mt-1">We&rsquo;re preparing your show</p>
+            </div>
+
+            <div class="w-full max-w-sm">
+                <div class="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                    <div id="wl-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-blue-700 to-blue-400 transition-all duration-300"></div>
+                </div>
+                <div class="flex items-center justify-between text-xs text-slate-400 mt-2">
+                    <span id="wl-stage">Connecting&hellip;</span>
+                    <span id="wl-pct"></span>
+                </div>
+            </div>
+
+            <button id="wl-retry" type="button" hidden
+                class="bg-blue-700 hover:bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-md transition-colors">
+                Try again
+            </button>
+        </div>
+
+        <div id="wl-toast" hidden
+            class="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[90%] text-center text-xs text-white bg-slate-800 border border-blue-700 px-3.5 py-2 rounded-lg">
+        </div>
+    </div>
+
+    <script src="/player.js"></script>
+</body>
+
+</html>

@@ -1,3 +1,8 @@
 node_modules
 .env
 downloads/*
+.freebuff/project-id
+
+# local sqlite databases
+*.sqlite
+*.sqlite-journal
