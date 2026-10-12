@@ -196,6 +196,18 @@ export class TorrentHelper {
   }
 
   /**
+   * Sync lookup inside the WebTorrent client by infohash.
+   * NOTE: client.get() is async in WebTorrent v3 - it returns a Promise,
+   * which is truthy and would pass null-guards, then die at torrent.once
+   * ("torrent.once is not a function"). These sync call sites use the
+   * client's torrent list directly instead.
+   */
+  findClientTorrent(infoHash) {
+    const wanted = String(infoHash || '').toLowerCase();
+    if (!wanted) return null;
+    return (this.client.torrents || []).find((t) => t.infoHash === wanted) || null;
+  }
+  /**
    * Waits for a torrent's video files to finish downloading.
    * Note: WebTorrent's 'done' event only fires when EVERY file is complete,
    * including deselected junk files (samples, NFOs) that will never download.
@@ -205,7 +217,7 @@ export class TorrentHelper {
    */
   waitForDone(torrentOrHash) {
     const torrent = typeof torrentOrHash === 'string'
-      ? (this.activeDownloads.get(torrentOrHash) || this.client.get(torrentOrHash))
+      ? (this.activeDownloads.get(torrentOrHash) || this.findClientTorrent(torrentOrHash))
       : torrentOrHash;
 
     if (!torrent) {
@@ -376,7 +388,7 @@ export class TorrentHelper {
    * @returns {Object|null} Formatted progress details or null if not found.
    */
   getProgress(infoHash) {
-    const torrent = this.activeDownloads.get(infoHash) || this.client.get(infoHash);
+    const torrent = this.activeDownloads.get(infoHash) || this.findClientTorrent(infoHash);
 
     if (!torrent) {
       return null;
@@ -466,7 +478,7 @@ export class TorrentHelper {
    */
   remove(infoHash, destroyStore = false) {
     return new Promise((resolve) => {
-      const torrent = this.activeDownloads.get(infoHash) || this.client.get(infoHash);
+      const torrent = this.activeDownloads.get(infoHash) || this.findClientTorrent(infoHash);
       if (!torrent) {
         return resolve(false);
       }

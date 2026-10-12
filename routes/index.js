@@ -8,6 +8,7 @@ import feed from "./feed.js";
 import movies from "./movies.js";
 import tv from "./tv.js";
 import user from "./user.js";
+import stream from "./stream.js";
 
 
 export default [
@@ -20,4 +21,5 @@ export default [
     movies,
     tv,
     user,
+    stream,
 ]

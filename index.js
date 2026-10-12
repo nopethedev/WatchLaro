@@ -4,12 +4,10 @@ import fs from "fs";
 import session from "express-session";
 //import { Sequelize, DataTypes } from "sequelize";
 import { sequelize, initDB } from "./database/index.js";
-import dotenv from "dotenv";
 import multer from "multer";
 import cors from "cors";
 import axios from "axios";
 import nodeCache from "node-cache"
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

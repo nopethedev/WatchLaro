@@ -358,6 +358,11 @@ export function scoreResult(item, { queryTokens, targetQuality }) {
 function normalizeSearchResult(raw) {
   const sizeBytes = parseSize(raw.size);
   const timestamp = raw.time ? new Date(raw.time).getTime() || 0 : 0;
+  // Some providers (e.g. TPB) hand back the magnet directly - keep it so
+  // resolveMagnet() doesn't have to re-scrape a detail page for it.
+  const directMagnet = typeof raw.magnet === 'string' && raw.magnet.startsWith('magnet:')
+    ? raw.magnet
+    : null;
 
   return {
     title: String(raw.title || '').trim(),
@@ -372,7 +377,7 @@ function normalizeSearchResult(raw) {
     quality: detectQuality(raw.title),
     source: detectSource(raw.title),
     needsTranscode: needsTranscode(raw.title),
-    magnet: null,
+    magnet: directMagnet,
     score: 0,
   };
 }
@@ -491,15 +496,30 @@ function addTrackers(magnet) {
 }
 
 function rememberTorrent(torrent) {
-  if (torrent.infoHash) torrentIndex.set(torrent.infoHash.toLowerCase(), torrent);
+  if (torrent && typeof torrent.once === 'function' && torrent.infoHash) {
+    torrentIndex.set(torrent.infoHash.toLowerCase(), torrent);
+  }
 }
 
-function findTorrent(magnet) {
+function isLiveTorrent(value) {
+  return !!value && typeof value.once === 'function' && !value.destroyed;
+}
+
+async function findTorrent(magnet) {
   const infoHash = getInfoHash(magnet);
-  if (infoHash && torrentIndex.has(infoHash)) return torrentIndex.get(infoHash);
+  if (infoHash && torrentIndex.has(infoHash)) {
+    const cached = torrentIndex.get(infoHash);
+    // Anything that isn't a live torrent (e.g. a Promise cached by the old
+    // sync client.get call) is dropped, never returned.
+    if (isLiveTorrent(cached)) return cached;
+    torrentIndex.delete(infoHash);
+  }
   try {
-    const found = client.get(magnet);
-    if (found) {
+    // NOTE: client.get() is async in WebTorrent v3 - it must be awaited.
+    // The raw Promise is truthy, so using it un-awaited looks like a found
+    // torrent and dies later at torrent.once ("torrent.once is not a function").
+    const found = await client.get(magnet);
+    if (isLiveTorrent(found)) {
       rememberTorrent(found);
       return found;
     }
@@ -514,8 +534,12 @@ function waitForMetadata(torrent, timeoutMs = METADATA_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const cleanup = () => {
       clearTimeout(timer);
-      torrent.removeListener('ready', onReady);
-      torrent.removeListener('error', onError);
+      // Guarded: if setup threw halfway (or the torrent died), an orphaned
+      // timer firing cleanup must never crash the process with a second error.
+      try {
+        torrent.removeListener('ready', onReady);
+        torrent.removeListener('error', onError);
+      } catch { /* already gone */ }
     };
     const timer = setTimeout(() => {
       cleanup();
@@ -531,7 +555,7 @@ function waitForMetadata(torrent, timeoutMs = METADATA_TIMEOUT_MS) {
 
 /** Add (or reuse) a torrent and wait until its file list is known. */
 async function addTorrent(magnet, { job, sequential = false } = {}) {
-  const existing = findTorrent(magnet);
+  const existing = await findTorrent(magnet);
   if (existing) {
     rememberTorrent(existing);
     if (job) job.torrent = existing;
@@ -1089,8 +1113,10 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
     if (!file.done) {
       await new Promise((resolve, reject) => {
         const cleanup = () => {
-          file.removeListener('done', onDone);
-          torrent.removeListener('error', onError);
+          try {
+            file.removeListener('done', onDone);
+            torrent.removeListener('error', onError);
+          } catch { /* already gone */ }
         };
         const onDone = () => { cleanup(); resolve(); };
         const onError = (err) => { cleanup(); reject(err); };
