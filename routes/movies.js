@@ -13,18 +13,20 @@ app.post("/api/movies/search", async (req, res) => {
 });
 
 app.post("/api/movies/info", async (req, res) => {
-    const query = req.body.q
-    const getCache = movieDataCache.get(toString(query))
+    const query = String(req.body?.q ?? '');
+    if (!query) return res.status(400).json({ error: "Missing or invalid id" });
+    const getCache = movieDataCache.get("movie:info:" + query)
     if (!getCache) {
         try {
             let response = await axios.get("https://api.themoviedb.org/3/movie/" + Number(query), {
                 headers: { Authorization: "Bearer " + process.env.TMDB_KEY, "Content-Type": "application/json" }
             })
 
-            movieDataCache.set(query, response.data)
+            movieDataCache.set("movie:info:" + query, response.data)
             return res.json(response.data)
         } catch (err) {
-            return res.status(500)
+            console.error('[movies/info]', err.message);
+            return res.status(502).json({ error: "TMDB request failed" })
         }
 
     } else {

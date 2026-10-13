@@ -18,7 +18,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { path as ffmpegBinary } from '@ffmpeg-installer/ffmpeg';
@@ -76,6 +76,9 @@ const IGNORED_EXTENSIONS = new Set([
   '.7z', '.rar', '.zip', '.exe', '.iso', '.mka',
 ]);
 
+/** Subtitle sidecars kept alongside the video (never picked as the main video). */
+export const SUBTITLE_EXTENSIONS = new Set(['.srt', '.vtt', '.ass', '.ssa']);
+
 /** Files that look like video but are never the one you want to play. */
 const JUNK_NAME_RE = /(^|[\s._-])(sample|trailer|teaser|proof|preview|featurette)([\s._-]|$)/i;
 
@@ -117,7 +120,7 @@ try {
   TorrentSearchApi.enableProvider('1337x');
   TorrentSearchApi.enableProvider('Limetorrents');
 } catch (err) {
-  console.error('[downloader] failed to enable search providers:', err.message);
+  console.error('[search] failed to enable search providers:', err.message);
 }
 
 // No process-level error handler here on purpose: one would swallow real bugs
@@ -196,6 +199,64 @@ function isVideoFile(name) {
 
 function isJunkName(name) {
   return JUNK_NAME_RE.test(path.basename(String(name || '')));
+}
+
+function isSubtitleFile(name) {
+  return SUBTITLE_EXTENSIONS.has(path.extname(String(name || '')).toLowerCase());
+}
+
+/** code -> filename tokens that signal it (checked as whole tokens, not substrings). */
+const SUBTITLE_LANG_ALIASES = [
+  ['en', ['english', 'eng', 'en']],
+  ['es', ['spanish', 'espanol', 'español', 'esp', 'spa', 'es']],
+  ['fr', ['french', 'francais', 'français', 'fra', 'fre', 'fr']],
+  ['de', ['german', 'deutsch', 'ger', 'deu', 'de']],
+  ['it', ['italian', 'ita', 'it']],
+  ['pt', ['portuguese', 'portugues', 'por', 'pt']],
+  ['nl', ['dutch', 'nederlands', 'dut', 'nld', 'nl']],
+  ['pl', ['polish', 'pol', 'pl']],
+  ['ru', ['russian', 'rus', 'ru']],
+  ['ar', ['arabic', 'ara', 'ar']],
+  ['tr', ['turkish', 'tur', 'tr']],
+  ['hi', ['hindi', 'hin', 'hi']],
+  ['ja', ['japanese', 'jpn', 'ja', 'jp']],
+  ['ko', ['korean', 'kor', 'ko', 'kr']],
+  ['zh', ['chinese', 'chi', 'zho', 'zh', 'cn']],
+];
+
+/**
+ * Guess a subtitle language code from a sidecar file name, e.g.
+ * "Show.en.srt" -> "en", "Show.SPANISH.srt" -> "es".
+ * @returns {string} ISO-ish code, or "unknown".
+ */
+export function guessSubtitleLang(fileName) {
+  const tokens = new Set(
+    String(fileName || '')
+      .toLowerCase()
+      .replace(/\.[a-z0-9]+$/, '')
+      .split(/[^a-z0-9\u00e0-\u00ff]+/)
+      .filter(Boolean),
+  );
+  for (const [code, aliases] of SUBTITLE_LANG_ALIASES) {
+    for (const alias of aliases) {
+      if (tokens.has(alias)) return code;
+    }
+  }
+  return 'unknown';
+}
+
+/**
+ * Minimal SRT -> WebVTT conversion: comma timestamps become dots and the
+ * required "WEBVTT" header is added. .vtt input passes through untouched.
+ */
+export function srtToVtt(srtText) {
+  const body = String(srtText || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
+    .trim();
+  if (!body) return 'WEBVTT\n\n';
+  return `WEBVTT\n\n${body}\n`;
 }
 
 function sanitizeFileName(name) {
@@ -307,12 +368,32 @@ function qualityScore(quality, target) {
   return -15 - (found - want) * 15;
 }
 
-/** Share of the query's words present in a title. */
+/** Share of the query's words present in a title, plus a spaceless bonus. */
 function relevance(title, queryTokens) {
   if (!queryTokens.length) return 0;
   const text = normalizeText(title);
   const hits = queryTokens.filter((token) => text.includes(token)).length;
-  return hits / queryTokens.length;
+  const share = hits / queryTokens.length;
+  // Space/punctuation-proof: "s01e01" matches "s01 e01" and "SmilingFriends"
+  // matches "Smiling Friends". +1 when the spaceless title contains the
+  // spaceless query.
+  const spacelessTitle = text.replace(/\s+/g, '');
+  const spacelessQuery = queryTokens.join('');
+  const spacelessBonus = spacelessQuery && spacelessTitle.includes(spacelessQuery) ? 1 : 0;
+  return share + spacelessBonus;
+}
+
+/** True when every query token appears in the title in query order. */
+function isOrderedMatch(title, queryTokens) {
+  if (queryTokens.length < 2) return false;
+  const spacelessTitle = normalizeText(title).replace(/\s+/g, '');
+  let pos = 0;
+  for (const token of queryTokens) {
+    const idx = spacelessTitle.indexOf(token, pos);
+    if (idx < 0) return false;
+    pos = idx + token.length;
+  }
+  return true;
 }
 
 /**
@@ -331,9 +412,12 @@ export function scoreResult(item, { queryTokens, targetQuality }) {
   if (item.seeders > 0) score -= clamp(item.leechers / item.seeders, 0, 1) * 5;
 
   // Relevance: prefix beats substring beats scattered words.
+  // relevance() already includes the spaceless bonus (+1 -> +30 here).
   score += relevance(item.title, queryTokens) * 30;
   if (query && text.startsWith(query)) score += 40;
   else if (query && text.includes(query)) score += 20;
+  // Word order matters: "The Matrix 1999" outranks "Matrix Reloaded 1999".
+  if (isOrderedMatch(item.title, queryTokens)) score += 15;
 
   score += qualityScore(item.quality, targetQuality);
   score += SOURCE_SCORES[item.source] ?? 0;
@@ -433,7 +517,7 @@ export function clearSearchCache() {
  * @param {'score'|'seeders'|'size'|'newest'} [options.sort='score']
  * @param {string} [options.quality='1080p'] preferred resolution
  * @param {number} [options.minSeeders=0] drop anything below this
- * @param {number} [options.minRelevance=0.4] share of query words that must match
+ * @param {number} [options.minRelevance=1.0] share of query words that must match
  * @param {boolean} [options.cache=true]
  * @returns {Promise<Array<object>>} ranked results, best first, magnet included
  */
@@ -447,7 +531,7 @@ export async function search(query, options = {}) {
     sort = 'score',
     quality = DEFAULT_QUALITY,
     minSeeders = 0,
-    minRelevance = 0.4,
+    minRelevance = 1.0,
     cache = true,
   } = options;
 
@@ -456,7 +540,10 @@ export async function search(query, options = {}) {
 
   if (cache) {
     const cached = searchCache.get(cacheKey);
-    if (cached) return cached.map((item) => ({ ...item }));
+    if (cached) {
+      console.log(`[search] cache hit for "${text}" (${cached.length} results)`);
+      return cached.map((item) => ({ ...item }));
+    }
   }
 
   const rawResults = await TorrentSearchApi.search(text, category, limit);
@@ -482,6 +569,11 @@ export async function search(query, options = {}) {
   });
 
   if (cache) searchCache.set(cacheKey, results);
+  if (!results.length) {
+    console.log(`[search] "${text}" -> 0 results`);
+  } else {
+    console.log(`[search] "${text}" -> ${results.length} results, top: "${results[0].title}" (${results[0].seeders} seeds)`);
+  }
   return results.map((item) => ({ ...item }));
 }
 
@@ -553,13 +645,27 @@ function waitForMetadata(torrent, timeoutMs = METADATA_TIMEOUT_MS) {
   });
 }
 
+/** Wait for the file list, logging the stall-prone handshake at stage level. */
+async function waitForMetadataLogged(torrent, short) {
+  try {
+    await waitForMetadata(torrent);
+  } catch (err) {
+    console.error(`[download] metadata timeout for ${short}...: ${err.message}`);
+    throw err;
+  }
+  console.log(`[download] metadata ready: "${torrent.name}" (${torrent.files?.length ?? 0} files)`);
+  return torrent;
+}
+
 /** Add (or reuse) a torrent and wait until its file list is known. */
 async function addTorrent(magnet, { job, sequential = false } = {}) {
+  const short = String(magnet).slice(0, 30);
   const existing = await findTorrent(magnet);
   if (existing) {
     rememberTorrent(existing);
     if (job) job.torrent = existing;
-    await waitForMetadata(existing);
+    console.log(`[download] reusing torrent, waiting for metadata ${short}...`);
+    await waitForMetadataLogged(existing, short);
     return existing;
   }
 
@@ -583,7 +689,8 @@ async function addTorrent(magnet, { job, sequential = false } = {}) {
     });
   }
 
-  await waitForMetadata(torrent);
+  console.log(`[download] adding torrent, waiting for metadata ${short}...`);
+  await waitForMetadataLogged(torrent, short);
   return torrent;
 }
 
@@ -625,10 +732,13 @@ export function pickMainVideoFile(torrent) {
     .sort((a, b) => b.score - a.score)[0]?.file ?? null;
 }
 
-/** Deselect everything, then select only the video files. */
+/** Deselect everything, then select the video files plus subtitle sidecars. */
 function selectVideoFilesOnly(torrent) {
   torrent.files.forEach((file) => file.deselect());
-  torrent.files.filter((file) => isVideoFile(file.name)).forEach((file) => file.select());
+  const wanted = torrent.files.filter((file) => isVideoFile(file.name) || isSubtitleFile(file.name));
+  wanted.forEach((file) => file.select());
+  const subCount = wanted.filter((file) => isSubtitleFile(file.name)).length;
+  if (subCount > 0) console.log(`[download] keeping ${subCount} subtitle sidecar(s)`);
 }
 
 /** Deselect everything, then select exactly one file. */
@@ -640,6 +750,22 @@ function selectOnlyFile(torrent, file) {
 /* ------------------------------------------------------------------ *
  * jobs: status, progress, heartbeat, timeout
  * ------------------------------------------------------------------ */
+
+/** Subtitle sidecars for a job: [{ name, lang }] (best-effort, never throws). */
+function listSubtitles(job) {
+  try {
+    const files = job?.torrent?.files || [];
+    const found = files.filter((file) => isSubtitleFile(file?.name));
+    if (found.length) {
+      return found.map((file) => ({
+        name: path.basename(String(file.name)),
+        lang: guessSubtitleLang(file.name),
+      }));
+    }
+    if (Array.isArray(job?.subtitles) && job.subtitles.length) return job.subtitles;
+  } catch { /* subtitles are best-effort */ }
+  return [];
+}
 
 function snapshot(job) {
   const torrent = job.torrent;
@@ -682,6 +808,7 @@ function snapshot(job) {
     name: torrent?.name || job.name || null,
     file: mainFile?.name || job.fileName || null,
     outputFile: job.outputFile || null,
+    subtitles: listSubtitles(job),
     magnet: job.magnet,
     infoHash: job.infoHash || null,
     transcodeNeeded: job.transcodeNeeded ?? false,
@@ -712,6 +839,49 @@ export function getAllProgress() {
   return getProgress();
 }
 
+/** Depth-capped recursive basename search (directories only, never file bodies). */
+function walkForFileName(dir, baseName, depth = 0) {
+  if (depth > 6) return null;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name === baseName) return path.join(dir, entry.name);
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const hit = walkForFileName(path.join(dir, entry.name), baseName, depth + 1);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/**
+ * Absolute path of a subtitle sidecar for a magnet, or null.
+ * Prefers the torrent's own file paths, then falls back to a basename
+ * search under the downloads dir (the torrent may be gone from memory
+ * while its files persist on disk).
+ */
+export function findSubtitleFile(magnet, fileName) {
+  const base = path.basename(String(fileName || ''));
+  if (!base) return null;
+  const job = getJob(magnet);
+  const files = job?.torrent?.files || [];
+  for (const file of files) {
+    if (path.basename(String(file?.name || '')) === base) {
+      const abs = path.join(DOWNLOADS_DIR, String(file.path || file.name));
+      if (abs.startsWith(DOWNLOADS_DIR) && existsSync(abs)) return abs;
+    }
+  }
+  const direct = path.join(DOWNLOADS_DIR, base);
+  if (existsSync(direct)) return direct;
+  return walkForFileName(DOWNLOADS_DIR, base);
+}
+
 function armTimer(job) {
   clearTimeout(job.timer);
   job.deadline = Date.now() + job.timeoutMs;
@@ -733,6 +903,24 @@ function finishJob(job) {
   armRetention(job);
 }
 
+/** Short human label for logs: the torrent name once known, else a key stub. */
+function jobLabel(job) {
+  return job.name ? `"${job.name}"` : job.key.slice(0, 8);
+}
+
+/**
+ * Log download/transcode progress at 25/50/75/100 only. The last-logged
+ * milestone lives on the job so per-piece/per-tick updates stay silent.
+ */
+function logMilestone(job, kind, pct) {
+  const milestone = Math.floor(clamp(pct, 0, 100) / 25) * 25;
+  const field = kind === 'transcode' ? 'lastTranscodeMilestone' : 'lastDownloadMilestone';
+  if (milestone >= 25 && milestone > (job[field] || 0)) {
+    job[field] = milestone;
+    console.log(`[${kind === 'transcode' ? 'transcode' : 'download'}] ${jobLabel(job)} ${milestone}%`);
+  }
+}
+
 async function destroyJob(job, { deleteFiles }) {
   if (job.command) {
     try { job.command.kill('SIGKILL'); } catch { /* already gone */ }
@@ -746,7 +934,7 @@ async function destroyJob(job, { deleteFiles }) {
         torrent.destroy({ destroyStore: deleteFiles }, () => resolve());
       });
     } catch (err) {
-      console.error('[downloader] destroy failed:', err.message);
+      console.error('[download] destroy failed:', err.message);
     }
     if (job.infoHash) torrentIndex.delete(job.infoHash);
     job.torrent = null;
@@ -765,7 +953,7 @@ async function onTimeout(job) {
     return;
   }
   const minutes = Math.round((job.timeoutMs / 60_000) * 10) / 10;
-  console.log(`[downloader] ${job.key} cancelled after ${minutes}m without heartbeat`);
+  console.log(`[heartbeat] ${jobLabel(job)} cancelled after ${minutes}m without heartbeat`);
   await destroyJob(job, { deleteFiles: job.deleteFilesOnTimeout });
   job.status = 'error';
   job.error = `no heartbeat for ${minutes}m - cancelled and data deleted`;
@@ -801,6 +989,7 @@ function ensureJob(magnet, options = {}) {
       name: null,
       file: null,
       fileName: null,
+      subtitles: [],
       outputFile: null,
       outputPath: null,
       transcodeNeeded: false,
@@ -834,7 +1023,10 @@ function ensureJob(magnet, options = {}) {
  */
 export function heartbeat(magnet) {
   const job = getJob(magnet);
-  if (!job) return { ok: false, status: 'idle', expiresIn: null };
+  if (!job) {
+    console.log(`[heartbeat] unknown job ${String(magnet).slice(0, 30)}...`);
+    return { ok: false, status: 'idle', expiresIn: null };
+  }
 
   job.lastHeartbeat = Date.now();
   armTimer(job);
@@ -849,8 +1041,12 @@ export function heartbeat(magnet) {
  */
 export async function cancel(magnet, { deleteFiles = false } = {}) {
   const job = getJob(magnet);
-  if (!job) return false;
+  if (!job) {
+    console.log(`[download] cancel: unknown job ${String(magnet).slice(0, 30)}...`);
+    return false;
+  }
 
+  console.log(`[download] cancelling ${jobLabel(job)} (deleteFiles=${deleteFiles})`);
   await destroyJob(job, { deleteFiles });
   job.status = 'error';
   job.error = 'cancelled';
@@ -893,6 +1089,7 @@ export async function stream(magnet, req, res, options = {}) {
 
   const file = pickMainVideoFile(torrent);
   if (!file) {
+    console.error(`[stream] no playable video file in ${String(magnet).slice(0, 30)}...`);
     job.status = 'error';
     job.error = 'no playable video file in this torrent';
     finishJob(job);
@@ -906,6 +1103,7 @@ export async function stream(magnet, req, res, options = {}) {
   job.fileName = file.name;
   job.name = torrent.name;
   job.transcodeNeeded = needsTranscode(torrent.name);
+  console.log(`[stream] main file: "${file.name}" (${Math.round(file.length / MB)} MB)`);
 
   // Every play re-arms the timer: a player reconnecting to seek extends the job.
   armTimer(job);
@@ -917,6 +1115,7 @@ export async function stream(magnet, req, res, options = {}) {
   const range = parseRange(req.headers?.range, size);
 
   if (range === 'unsatisfiable') {
+    console.log(`[stream] 416 unsatisfiable range "${req.headers?.range}" for "${file.name}" (${size} bytes)`);
     res.writeHead(416, { 'Content-Range': `bytes */${size}`, 'Accept-Ranges': 'bytes' });
     res.end();
     return file;
@@ -936,8 +1135,10 @@ export async function stream(magnet, req, res, options = {}) {
       'Content-Range': `bytes ${range.start}-${range.end}/${size}`,
       Connection: 'keep-alive',
     });
+    console.log(`[stream] serving "${file.name}" 206 bytes ${range.start}-${range.end}/${size}`);
   } else {
     res.writeHead(200, { ...commonHeaders, 'Content-Length': size });
+    console.log(`[stream] serving "${file.name}" 200 full file (${size} bytes)`);
   }
 
   // HEAD probes and zero-length files need headers only.
@@ -1005,12 +1206,13 @@ function probeMedia(filePath) {
 function trackTranscodeProgress(job, progress) {
   if (typeof progress.percent === 'number' && Number.isFinite(progress.percent)) {
     job.transcodeProgress = clamp(progress.percent, 0, 100);
-    return;
+  } else {
+    // ffmpeg only sends percent once it knows the duration.
+    const [hours, minutes, seconds] = String(progress.timemark || '00:00:00').split(':').map(Number);
+    const elapsed = (hours * 3600) + (minutes * 60) + seconds;
+    if (job.duration > 0) job.transcodeProgress = clamp((elapsed / job.duration) * 100, 0, 100);
   }
-  // ffmpeg only sends percent once it knows the duration.
-  const [hours, minutes, seconds] = String(progress.timemark || '00:00:00').split(':').map(Number);
-  const elapsed = (hours * 3600) + (minutes * 60) + seconds;
-  if (job.duration > 0) job.transcodeProgress = clamp((elapsed / job.duration) * 100, 0, 100);
+  logMilestone(job, 'transcode', job.transcodeProgress);
 }
 
 function transcode(job, inputPath, outputPath, outputOptions) {
@@ -1064,8 +1266,9 @@ function buildOutputOptions(probe) {
 /**
  * Download a magnet's video and normalise it into a browser-playable mp4.
  *
- * Junk (samples, .nfo, artwork, subtitles) is deselected so it never downloads.
- * Only the largest real video is kept. ffmpeg stream-copies whatever is
+ * Junk (samples, .nfo, artwork) is deselected so it never downloads.
+ * Subtitle sidecars (.srt/.vtt/.ass/.ssa) are kept alongside the video but
+ * never picked as the main file. Only the largest real video is kept. ffmpeg stream-copies whatever is
  * already H.264/AAC and re-encodes only the stream that needs it, so an mp4
  * that is already compatible is handed back untouched.
  *
@@ -1088,6 +1291,7 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
 
   const { outputName, deleteSource = true } = options;
   ensureDownloadsDir();
+  console.log(`[download] starting download ${String(magnet).slice(0, 30)}...`);
 
   const job = ensureJob(magnet, {
     timeoutMin,
@@ -1108,22 +1312,37 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
     job.fileName = file.name;
     job.name = torrent.name;
     job.transcodeNeeded = needsTranscode(torrent.name);
+    console.log(`[download] main file: "${file.name}" (${Math.round(file.length / MB)} MB)`);
 
     // The torrent's 'done' waits for deselected junk too, so watch the file.
     if (!file.done) {
       await new Promise((resolve, reject) => {
+        // Per-piece ticks stay silent; logMilestone only emits 25/50/75/100.
+        const onDownload = () => {
+          const files = torrent.files || [];
+          const videos = files.filter((f) => isVideoFile(f.name));
+          const pool = videos.length ? videos : files;
+          const total = pool.reduce((sum, f) => sum + f.length, 0);
+          const got = pool.reduce((sum, f) => sum + (f.downloaded || 0), 0);
+          if (total > 0) logMilestone(job, 'download', (got / total) * 100);
+        };
         const cleanup = () => {
           try {
             file.removeListener('done', onDone);
             torrent.removeListener('error', onError);
+            torrent.removeListener('download', onDownload);
           } catch { /* already gone */ }
         };
         const onDone = () => { cleanup(); resolve(); };
         const onError = (err) => { cleanup(); reject(err); };
 
+        torrent.on('download', onDownload);
         file.once('done', onDone);
         torrent.once('error', onError);
       });
+      logMilestone(job, 'download', 100);
+    } else {
+      console.log(`[download] already complete ${jobLabel(job)}, skipping download wait`);
     }
 
     const sourcePath = path.join(DOWNLOADS_DIR, file.path);
@@ -1146,8 +1365,12 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
     if (needsWork) {
       job.status = 'transcoding';
       job.transcodeProgress = 0;
+      console.log(`[transcode] starting transcode ${jobLabel(job)} (${probe?.videoCodec || '?'} video, ${probe?.audioCodec || '?'} audio -> mp4)`);
       rmSync(outputPath, { force: true });
       await transcode(job, sourcePath, outputPath, buildOutputOptions(probe));
+      logMilestone(job, 'transcode', 100);
+    } else {
+      console.log(`[download] already browser-ready ${jobLabel(job)}, skipping transcode`);
     }
 
     job.outputPath = outputPath;
@@ -1156,7 +1379,10 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
     job.downloadProgress = 100;
     job.transcodeProgress = 100;
     job.error = null;
+    // Remember sidecars now: the torrent may be forgotten while files persist.
+    job.subtitles = listSubtitles(job);
     finishJob(job);
+    console.log(`[download] finished ${jobLabel(job)} -> "${job.outputFile}"`);
 
     if (deleteSource && sourcePath !== outputPath) {
       rmSync(sourcePath, { force: true });
@@ -1173,6 +1399,7 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
       transcodeProgress: 100,
     };
   } catch (err) {
+    console.error(`[download] job failed ${jobLabel(job)}: ${err.message}`);
     job.status = 'error';
     job.error = err.message;
     finishJob(job);
@@ -1189,6 +1416,10 @@ export default {
   heartbeat,
   cancel,
   clearSearchCache,
+  guessSubtitleLang,
+  srtToVtt,
+  findSubtitleFile,
+  SUBTITLE_EXTENSIONS,
   client,
   DOWNLOADS_DIR,
   DEFAULT_TIMEOUT_MIN,

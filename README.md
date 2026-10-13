@@ -1,6 +1,6 @@
 # WatchLaro
 
-A self-hostable alternative to Jellyfin, built around downloading and sharing media instead of just streaming from a static library. Written in EJS and Javascript using MariaDB as database.
+A self-hostable alternative to Jellyfin, built around downloading and sharing media instead of just streaming from a static library. Written in EJS and Javascript using MariaDB/SQLITE as database.
 
 ![WatchLaro Screenshot](https://cdn.voidhosting.vip/s/9Bv0HMBC)
 
@@ -13,7 +13,9 @@ A self-hostable alternative to Jellyfin, built around downloading and sharing me
 - Basic media playback
 - Minimal frontend for browsing what's already downloaded
 - Share movies directly from the admin panel.
+- Working on demand streaming with custom player.
 
+It will download the whole episode before playing, but if your on Edge/Safari it will play instantly due to their support of DDP5.
 Everything else below is planned but not yet available.
 
 ## Roadmap
@@ -21,12 +23,11 @@ Everything else below is planned but not yet available.
 Planned features, roughly in the order we're tackling them:
 
 - [ ] **Proper browsing** — real library browsing with search, filters, and sorting
-- [ ] **TV show support** — seasons, episodes, and series tracking
+- [ ] **TV show support** — seasons, episodes, and series tracking (half done)
 - [ ] **Proper sharing** — real sharing system instead of the current bare-bones approach
 - [ ] **Movie requests** — let users request titles to be downloaded
 - [ ] **Subtitles** — subtitle search, download, and syncing
 - [ ] **Dubs** — support for dubbed audio tracks
-- [ ] **On-demand streaming** — stream directly without requiring a full download first
 
 ## System Requirements
 
@@ -34,7 +35,7 @@ Planned features, roughly in the order we're tackling them:
 - **CPU:** 1 core or more
 - **RAM:** 1 GB or more
 - **Storage:** 5 GB SSD minimum (20+ GB free recommended)
-- **Database:** MariaDB required (SQLite support coming soon)
+- **Database:** MariaDB required (SQLite works too)
 - **GPU transcoding:** not supported yet (CPU-only for now)
 
 ## Installation

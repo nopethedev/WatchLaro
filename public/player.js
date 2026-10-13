@@ -27,6 +27,12 @@
  *   { type: 'wl:play', id, season, episode, title }
  *   { type: 'wl:download' }
  *   { type: 'wl:stop' }
+ *
+ * UI skin: Netflix-style dark player. A real <video> element with NO native
+ * controls is driven by the custom bottom bar (play/pause, -10s/+10s, volume,
+ * blue scrubber, time-remaining, fullscreen). The backend contract above is
+ * unchanged: same params, same endpoints, same postMessage API, same
+ * download-then-poll-then-play flow.
  */
 
 (function () {
@@ -41,6 +47,11 @@
     var POLL_MAX_BACKOFF_MS = 6000;
     var MAX_CONSECUTIVE_ERRORS = 8;
     var TOAST_MS = 3500;
+    var IDLE_HIDE_MS = 3000;
+    var SEEK_MAX = 1000;
+
+    var GLYPH_PLAY = '\u25B6';          // ▶
+    var GLYPH_PAUSE = '\u275A\u275A';   // ❚❚
 
     var el = {
         player: document.getElementById('wl-player'),
@@ -57,7 +68,21 @@
         download: document.getElementById('wl-download'),
         reload: document.getElementById('wl-reload'),
         badge: document.getElementById('wl-badge'),
-        toast: document.getElementById('wl-toast')
+        toast: document.getElementById('wl-toast'),
+        back: document.getElementById('wl-back'),
+        controls: document.getElementById('wl-controls'),
+        seek: document.getElementById('wl-seek'),
+        play: document.getElementById('wl-play'),
+        back10: document.getElementById('wl-back10'),
+        fwd10: document.getElementById('wl-fwd10'),
+        mute: document.getElementById('wl-mute'),
+        volume: document.getElementById('wl-volume'),
+        ctitle: document.getElementById('wl-ctitle'),
+        remaining: document.getElementById('wl-remaining'),
+        next: document.getElementById('wl-next'),
+        eps: document.getElementById('wl-eps'),
+        subs: document.getElementById('wl-subs'),
+        full: document.getElementById('wl-full')
     };
 
     var params = { id: null, season: null, episode: null, title: '' };
@@ -69,6 +94,10 @@
     var downloading = false;      // true while we know a download job is running
     var heartbeatTimer = null;
     var toastTimer = null;
+    var idleTimer = null;
+    var isScrubbing = false;
+    var subtitleTracks = [];   // [{ name, lang }] from info.subtitles, attached at ready
+    var subtitleIndex = -1;    // -1 = off, else index into subtitleTracks
 
     /* ------------------------------------------------------------------ *
      * helpers
@@ -128,6 +157,12 @@
         return API_BASE + '/stream/progress?' + qs.join('&');
     }
 
+    function subsUrl(id, season, episode, lang) {
+        var url = API_BASE + '/stream/subs/' + buildPath(id, season, episode);
+        if (lang) url += '?lang=' + encode(lang);
+        return url;
+    }
+
     function showToast(message) {
         if (!el.toast) return;
         el.toast.textContent = message;
@@ -147,6 +182,46 @@
         var i = 0;
         while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
         return (n >= 10 || i === 0 ? Math.round(n) : n.toFixed(1)) + ' ' + units[i];
+    }
+
+    function pad2(n) {
+        return (n < 10 ? '0' : '') + n;
+    }
+
+    /** 65 -> "1:05", 3665 -> "1:00:65"-style "1:01:05". Non-finite -> "--:--". */
+    function formatClock(seconds) {
+        var s = Math.floor(Number(seconds));
+        if (!isFinite(s) || s < 0) return '--:--';
+        var h = Math.floor(s / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        var rest = s % 60;
+        return h > 0 ? h + ':' + pad2(m) + ':' + pad2(rest) : m + ':' + pad2(rest);
+    }
+
+    /** seconds -> "45 sec" | "3 min" | "2 h 14 min". Non-finite/negative -> ''. */
+    function formatETA(seconds) {
+        var s = Math.floor(Number(seconds));
+        if (!isFinite(s) || s < 0) return '';
+        if (s < 60) return s + ' sec';
+        var h = Math.floor(s / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        return h > 0 ? h + ' h ' + m + ' min' : m + ' min';
+    }
+
+    /** Remaining download seconds from a parseState info, or null when unknown. */
+    function estimateSeconds(info) {
+        var speed = Number(info.speed);
+        var size = Number(info.size);
+        var got = Number(info.downloaded);
+        if (!isFinite(speed) || speed <= 0) return null;
+        if (!isFinite(size) || size <= 0) return null;
+        if (!isFinite(got) || got < 0) got = 0;
+        if (got >= size) return 0;
+        return (size - got) / speed;
+    }
+
+    function isEmbedded() {
+        return readFlag('embed') === '1';
     }
 
     /* ------------------------------------------------------------------ *
@@ -204,7 +279,12 @@
             percent: percent,
             speed: data.speed || data.downloadSpeed || null,
             downloaded: data.downloaded || null,
-            size: data.size || data.total || null
+            size: data.size || data.total || null,
+            subtitles: Array.isArray(data.subtitles)
+                ? data.subtitles.filter(function (s) { return s && (s.name || s.lang); }).map(function (s) {
+                    return { name: String(s.name || ''), lang: String(s.lang || 'unknown') };
+                })
+                : []
         };
     }
 
@@ -225,7 +305,8 @@
         el.overlay.classList.toggle('is-error', !!opts.error);
         setHidden(el.overlay, false);
 
-        el.icon.innerHTML = opts.error ? '&#9888;' : '&#127871;';
+        // CSS draws the blue spinner; on error it becomes a static "!" marker.
+        el.icon.textContent = opts.error ? '!' : '';
         el.heading.textContent = opts.error
             ? 'Something went wrong'
             : (opts.heading || 'Grabbing popcorn\u2026');
@@ -247,11 +328,209 @@
         }
 
         setHidden(el.retry, !opts.error);
+        showBars();
     }
 
     function hideOverlay() {
         setHidden(el.overlay, true);
         el.overlay.classList.remove('is-error');
+        pokeBars();
+    }
+
+    /* ------------------------------------------------------------------ *
+     * custom controls (video has no native controls)
+     * ------------------------------------------------------------------ */
+
+    function showBars() {
+        if (!el.player) return;
+        el.player.classList.remove('is-idle');
+    }
+
+    function pokeBars() {
+        // Visible while paused, preparing, errored, or embedded; auto-hide
+        // only when actually playing underneath.
+        showBars();
+        clearTimeout(idleTimer);
+        idleTimer = null;
+        if (isEmbedded()) return;
+        var overlayOpen = el.overlay && !el.overlay.hidden;
+        if (state === 'ready' && !overlayOpen && el.video && !el.video.paused && !el.video.ended) {
+            idleTimer = setTimeout(function () {
+                var stillPlaying = state === 'ready' && el.video && !el.video.paused && !el.video.ended;
+                var overlayStillOpen = el.overlay && !el.overlay.hidden;
+                if (stillPlaying && !overlayStillOpen && !isEmbedded()) {
+                    el.player.classList.add('is-idle');
+                }
+            }, IDLE_HIDE_MS);
+        }
+    }
+
+    function updatePlayIcon() {
+        if (!el.play || !el.video) return;
+        var paused = el.video.paused || el.video.ended;
+        el.play.textContent = paused ? GLYPH_PLAY : GLYPH_PAUSE;
+        el.play.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+    }
+
+    function updateSeekUI() {
+        if (!el.video) return;
+        var duration = el.video.duration;
+        var current = el.video.currentTime || 0;
+        var ratio = (isFinite(duration) && duration > 0)
+            ? Math.max(0, Math.min(1, current / duration))
+            : 0;
+        if (el.seek) {
+            if (!isScrubbing) el.seek.value = String(Math.round(ratio * SEEK_MAX));
+            el.seek.style.setProperty('--fill', (ratio * 100).toFixed(2) + '%');
+        }
+        if (el.remaining) {
+            el.remaining.textContent = (isFinite(duration) && duration > 0)
+                ? '-' + formatClock(duration - current)
+                : '--:--';
+        }
+    }
+
+    function updateVolumeUI() {
+        if (!el.video) return;
+        var level = el.video.muted ? 0 : (Number(el.video.volume) || 0);
+        if (el.volume) {
+            el.volume.value = String(Math.round(level * 100));
+            el.volume.style.setProperty('--fill', Math.round(level * 100) + '%');
+        }
+        if (el.mute) el.mute.classList.toggle('is-muted', !!el.video.muted);
+    }
+
+    /* ---------------- subtitles ---------------- */
+
+    var SUBTITLE_LABELS = {
+        en: 'English', es: 'Spanish', fr: 'French', de: 'German',
+        it: 'Italian', pt: 'Portuguese', nl: 'Dutch', pl: 'Polish',
+        ru: 'Russian', ar: 'Arabic', tr: 'Turkish', hi: 'Hindi',
+        ja: 'Japanese', ko: 'Korean', zh: 'Chinese'
+    };
+
+    function subtitleLabel(track, index) {
+        var lang = String(track.lang || '').toLowerCase();
+        if (SUBTITLE_LABELS[lang]) return SUBTITLE_LABELS[lang];
+        if (track.name) return String(track.name);
+        return 'Subtitle ' + (index + 1);
+    }
+
+    /**
+     * ?lang= value that resolves back to exactly this file. A known lang
+     * code works when no other track shares it; otherwise the file name is
+     * used, which the endpoint matches against the sidecar list.
+     */
+    function subtitleQuery(track) {
+        var lang = String(track.lang || '').toLowerCase();
+        var shared = subtitleTracks.filter(function (t) {
+            return String(t.lang || '').toLowerCase() === lang;
+        }).length;
+        if (lang && lang !== 'unknown' && shared === 1) return lang;
+        return track.name || lang || '';
+    }
+
+    function setTrackMode(index, mode) {
+        try {
+            var tracks = el.video ? el.video.textTracks : null;
+            if (tracks && index >= 0 && index < tracks.length) tracks[index].mode = mode;
+        } catch (e) { /* textTracks unavailable, the toast still tells the story */ }
+    }
+
+    /** Rebuild the <track> list from info.subtitles. Starts with all tracks off. */
+    function attachSubtitles(list) {
+        subtitleTracks = Array.isArray(list) ? list.slice(0) : [];
+        subtitleIndex = -1;
+        if (!el.video) return;
+        var old = el.video.querySelectorAll('track');
+        for (var i = 0; i < old.length; i++) old[i].parentNode.removeChild(old[i]);
+        subtitleTracks.forEach(function (track, index) {
+            var node = document.createElement('track');
+            node.kind = 'subtitles';
+            node.label = subtitleLabel(track, index);
+            node.srclang = String(track.lang || '');
+            node.src = subsUrl(params.id, params.season, params.episode, subtitleQuery(track));
+            el.video.appendChild(node);
+            setTrackMode(index, 'disabled');
+        });
+    }
+
+    /** CC button: off -> track 1 -> track 2 -> ... -> off, with a toast each step. */
+    function cycleSubtitles() {
+        if (!subtitleTracks.length) {
+            showToast('No subtitles available');
+            pokeBars();
+            return;
+        }
+        setTrackMode(subtitleIndex, 'disabled');
+        if (subtitleIndex < subtitleTracks.length - 1) {
+            subtitleIndex += 1;
+            setTrackMode(subtitleIndex, 'showing');
+            showToast('Subtitles: ' + subtitleLabel(subtitleTracks[subtitleIndex], subtitleIndex));
+        } else {
+            subtitleIndex = -1;
+            showToast('Subtitles off');
+        }
+        pokeBars();
+    }
+
+    function togglePlay() {
+        if (!el.video || !params.id) return;
+        if (state !== 'ready') return;
+        if (!el.video.src) return;
+        if (el.video.paused || el.video.ended) {
+            var attempt = el.video.play();
+            if (attempt && typeof attempt.catch === 'function') {
+                attempt.catch(function () { /* browser blocked autoplay, fine */ });
+            }
+        } else {
+            el.video.pause();
+        }
+    }
+
+    function seekBy(seconds) {
+        if (!el.video || state !== 'ready') return;
+        var duration = el.video.duration;
+        var target = (el.video.currentTime || 0) + seconds;
+        if (isFinite(duration) && duration > 0) {
+            target = Math.max(0, Math.min(duration, target));
+        } else {
+            target = Math.max(0, target);
+        }
+        try { el.video.currentTime = target; } catch (e) { /* not seekable yet */ }
+        updateSeekUI();
+        pokeBars();
+    }
+
+    function toggleMute() {
+        if (!el.video) return;
+        el.video.muted = !el.video.muted;
+        updateVolumeUI();
+        pokeBars();
+    }
+
+    function toggleFullscreen() {
+        try {
+            if (document.fullscreenElement) {
+                if (document.exitFullscreen) document.exitFullscreen();
+            } else if (el.player && el.player.requestFullscreen) {
+                el.player.requestFullscreen();
+            } else if (el.video && el.video.webkitEnterFullscreen) {
+                el.video.webkitEnterFullscreen();
+            }
+        } catch (e) { /* fullscreen unavailable, fine */ }
+        pokeBars();
+    }
+
+    function resetControlsUI() {
+        if (el.seek) {
+            el.seek.value = '0';
+            el.seek.style.setProperty('--fill', '0%');
+        }
+        if (el.remaining) el.remaining.textContent = '--:--';
+        updatePlayIcon();
+        updateVolumeUI();
+        showBars();
     }
 
     /* ------------------------------------------------------------------ *
@@ -262,11 +541,35 @@
         return !!(params.season && params.episode);
     }
 
+    /**
+     * Edge and Safari decode DDP5.1/EAC3 natively, so series can skip the
+     * slow download+transcode path and play directly like movies do.
+     * Everything else (Chrome, Firefox, ...) still needs the transcode.
+     * Guarded for environments without navigator.userAgent (default: transcode).
+     */
+    function clientNeedsTranscode() {
+        var ua = (typeof navigator !== 'undefined' && navigator.userAgent)
+            ? String(navigator.userAgent)
+            : '';
+        if (!ua) return true;
+        // Chromium Edge (desktop "Edg/", Android "EdgA/", iOS "EdgiOS/") + legacy EdgeHTML ("Edge/").
+        if (/edg\//i.test(ua) || /edga\//i.test(ua) || /edgios\//i.test(ua) || /edge\//i.test(ua)) return false;
+        // iOS webviews are WebKit under the hood (Chrome/Firefox/Edge on iOS).
+        if (/crios|fxios|edgios/i.test(ua)) return false;
+        // Safari UA contains "Safari"; Chrome's UA does too, so exclude Chrome/Chromium.
+        if (/safari/i.test(ua) && !/chrome|chromium/i.test(ua)) return false;
+        return true;
+    }
+
     function applyTitle() {
         var text = params.title || '';
         if (text && isSeries()) text += ' \u00b7 S' + params.season + 'E' + params.episode;
         el.badge.textContent = text;
         el.badge.title = text;
+        if (el.ctitle) {
+            el.ctitle.textContent = text;
+            el.ctitle.title = text;
+        }
         document.title = text || 'Player';
     }
 
@@ -284,14 +587,17 @@
         }
     }
 
-    function playVideo() {
+    function playVideo(subtitles) {
         state = 'ready';
         hideOverlay();
+
+        if (Array.isArray(subtitles)) attachSubtitles(subtitles);
 
         if (!el.video.src || el.video.src.indexOf(streamUrl(params.id, params.season, params.episode)) === -1) {
             el.video.src = streamUrl(params.id, params.season, params.episode);
         }
         el.video.load();
+        resetControlsUI();
 
         if (opts_autoplay()) {
             var attempt = el.video.play();
@@ -361,7 +667,7 @@
                 if (info.ready) {
                     downloading = false;
                     setDownloadButton('done');
-                    playVideo();
+                    playVideo(info.subtitles);
                     return;
                 }
 
@@ -376,6 +682,10 @@
                 var detail = [];
                 if (info.speed) detail.push(formatBytes(info.speed) + '/s');
                 if (info.percent !== null) detail.push(Math.round(info.percent) + '%');
+                if (info.status !== 'transcoding') {
+                    var eta = estimateSeconds(info);
+                    if (eta !== null) detail.push('~' + formatETA(eta) + ' left');
+                }
                 el.pct.textContent = detail.join(' \u00b7 ');
 
                 schedulePoll();
@@ -437,27 +747,30 @@
             });
     }
 
-    /* ---------------- optional heartbeat ---------------- *
+    /* ---------------- heartbeat (auto while playing) ---------------- *
      * The backend deletes an abandoned torrent after its idle timeout, so a
-     * long stream wants a ping. Off unless you pass ?heartbeat=1.           */
+     * playing stream pings every 60s to stay alive. ?heartbeat=1 forces it
+     * on, ?heartbeat=0 forces it off.                                      */
+
+    function sendHeartbeat() {
+        if (readFlag('heartbeat') === '0') return;
+        if (readFlag('heartbeat') !== '1' && (state !== 'ready' || el.video.paused)) return;
+        if (!params.id) return;
+
+        fetch(API_BASE + '/stream/heartbeat?id=' + encode(params.id)
+            + (params.season ? '&season=' + encode(params.season) : '')
+            + (params.episode ? '&episode=' + encode(params.episode) : ''),
+        { method: 'POST', headers: { Accept: 'application/json' } })
+            .then(function (r) {
+                if (r.status === 404 || r.status === 405) stopHeartbeat();
+            })
+            .catch(function () { /* keep trying, network blips are fine */ });
+    }
 
     function startHeartbeat() {
-        if (readFlag('heartbeat') !== '1') return;
         stopHeartbeat();
-
-        heartbeatTimer = setInterval(function () {
-            fetch(API_BASE + '/stream/heartbeat?id=' + encode(params.id)
-                + (params.season ? '&season=' + encode(params.season) : '')
-                + (params.episode ? '&episode=' + encode(params.episode) : ''),
-            { method: 'POST', headers: { Accept: 'application/json' } })
-                .then(function (r) {
-                    if (r.status === 404 || r.status === 405) {
-                        stopHeartbeat();
-                        showToast('Heartbeat endpoint not available, disabled');
-                    }
-                })
-                .catch(function () { /* keep trying, network blips are fine */ });
-        }, 60000);
+        sendHeartbeat(); // ping immediately, don't wait up to 60s
+        heartbeatTimer = setInterval(sendHeartbeat, 60000);
     }
 
     function stopHeartbeat() {
@@ -483,6 +796,8 @@
         setDownloadButton('idle');
         el.video.removeAttribute('src');
         el.video.load();
+        attachSubtitles([]);
+        resetControlsUI();
 
         if (!params.id) {
             showOverlay({ error: 'No id was given. Try player.html?id=12345' });
@@ -503,8 +818,15 @@
         });
         state = 'preparing';
 
-        if (isSeries()) {
+        var needsTranscode = clientNeedsTranscode();
+        console.info('[WatchLaro] load: ' + (isSeries() ? 'series' : 'movie')
+            + ' -> ' + (isSeries() && needsTranscode ? 'download+transcode path' : 'direct play path')
+            + ' (UA: ' + ((typeof navigator !== 'undefined' && navigator.userAgent) || 'unknown') + ')');
+
+        if (isSeries() && needsTranscode) {
             // Series go through the download+transcode path first, then play.
+            // Edge/Safari skip this: they play DDP5.1/EAC3 natively. The manual
+            // Download button stays as the fallback if direct play fails.
             startDownload().then(function (started) {
                 if (!started) playVideo();
             });
@@ -532,17 +854,33 @@
         el.video.pause();
         el.video.removeAttribute('src');
         el.video.load();
+        attachSubtitles([]);
         state = 'idle';
         setDownloadButton('idle');
+        resetControlsUI();
     }
 
     /* ------------------------------------------------------------------ *
      * wiring
      * ------------------------------------------------------------------ */
 
+    // The custom bar drives the video; native controls stay off.
+    el.video.controls = false;
+    el.video.removeAttribute('controls');
+
     el.retry.addEventListener('click', function () { load({}); });
     el.reload.addEventListener('click', function () { load({}); });
     el.download.addEventListener('click', downloadNow);
+
+    if (el.back) el.back.addEventListener('click', function () {
+        if (window.history.length > 1) {
+            window.history.back();
+        } else if (document.referrer) {
+            window.location.href = document.referrer;
+        } else {
+            window.location.href = '/';
+        }
+    });
 
     // Buffering spinner, only while the video itself is waiting on data.
     el.video.addEventListener('waiting', function () {
@@ -579,6 +917,109 @@
         fail(messages[code] || 'The stream could not be played.');
     });
 
+    /* ---------------- custom-bar wiring ---------------- */
+
+    if (el.play) el.play.addEventListener('click', togglePlay);
+    if (el.back10) el.back10.addEventListener('click', function () { seekBy(-10); });
+    if (el.fwd10) el.fwd10.addEventListener('click', function () { seekBy(10); });
+    if (el.mute) el.mute.addEventListener('click', toggleMute);
+    if (el.full) el.full.addEventListener('click', toggleFullscreen);
+
+    // No dedicated backend for these; surface an honest toast instead of a
+    // dead button so the bar matches the reference layout.
+    if (el.next) el.next.addEventListener('click', function () {
+        showToast('Next episode is not available for this title');
+        pokeBars();
+    });
+    if (el.eps) el.eps.addEventListener('click', function () {
+        showToast('Episodes list is not available here');
+        pokeBars();
+    });
+    if (el.subs) el.subs.addEventListener('click', cycleSubtitles);
+
+    if (el.seek) {
+        el.seek.addEventListener('pointerdown', function () { isScrubbing = true; });
+        el.seek.addEventListener('input', function () {
+            isScrubbing = true;
+            if (!el.video || state !== 'ready') return;
+            var duration = el.video.duration;
+            if (!isFinite(duration) || duration <= 0) return;
+            var target = (Number(el.seek.value) / SEEK_MAX) * duration;
+            try { el.video.currentTime = target; } catch (e) { /* not seekable yet */ }
+            el.seek.style.setProperty('--fill', (Number(el.seek.value) / 10).toFixed(2) + '%');
+            updateSeekUI();
+        });
+        ['change', 'pointerup'].forEach(function (name) {
+            el.seek.addEventListener(name, function () {
+                isScrubbing = false;
+                updateSeekUI();
+                pokeBars();
+            });
+        });
+    }
+
+    if (el.volume) {
+        el.volume.addEventListener('input', function () {
+            if (!el.video) return;
+            var level = Math.max(0, Math.min(100, Number(el.volume.value) || 0)) / 100;
+            el.video.volume = level;
+            el.video.muted = level === 0 ? true : false;
+            updateVolumeUI();
+        });
+        el.volume.addEventListener('change', pokeBars);
+    }
+
+    if (el.video) {
+        el.video.addEventListener('click', function () {
+            // Click-to-toggle only once playback is up; the loading overlay
+            // covers the video before that anyway.
+            if (state === 'ready' && el.overlay.hidden) togglePlay();
+        });
+        el.video.addEventListener('play', function () { updatePlayIcon(); pokeBars(); sendHeartbeat(); });
+        el.video.addEventListener('pause', function () { updatePlayIcon(); pokeBars(); });
+        el.video.addEventListener('ended', function () { updatePlayIcon(); pokeBars(); });
+        el.video.addEventListener('timeupdate', updateSeekUI);
+        el.video.addEventListener('loadedmetadata', updateSeekUI);
+        el.video.addEventListener('durationchange', updateSeekUI);
+        el.video.addEventListener('volumechange', updateVolumeUI);
+    }
+
+    // Netflix-style auto-hide: any activity shows the bars, idleness while
+    // playing hides them again.
+    if (el.player) {
+        ['mousemove', 'touchstart', 'touchmove'].forEach(function (name) {
+            el.player.addEventListener(name, pokeBars, { passive: true });
+        });
+        el.player.addEventListener('keydown', pokeBars);
+        if (el.controls) {
+            el.controls.addEventListener('focusin', showBars);
+        }
+    }
+    document.addEventListener('keydown', function (e) {
+        var tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (state !== 'ready') return;
+        if (e.key === ' ' || e.key === 'k') { e.preventDefault(); togglePlay(); }
+        else if (e.key === 'ArrowLeft') { seekBy(-10); }
+        else if (e.key === 'ArrowRight') { seekBy(10); }
+        else if (e.key === 'ArrowUp') {
+            if (!el.video) return;
+            e.preventDefault();
+            el.video.muted = false;
+            el.video.volume = Math.min(1, (Number(el.video.volume) || 0) + 0.1);
+            updateVolumeUI();
+        }
+        else if (e.key === 'ArrowDown') {
+            if (!el.video) return;
+            e.preventDefault();
+            el.video.volume = Math.max(0, (Number(el.video.volume) || 0) - 0.1);
+            if (el.video.volume === 0) el.video.muted = true;
+            updateVolumeUI();
+        }
+        else if (e.key === 'm') { toggleMute(); }
+        else if (e.key === 'f') { toggleFullscreen(); }
+    });
+
     window.addEventListener('message', function (event) {
         if (event.origin && event.origin !== location.origin) return;
         var data = event.data;
@@ -597,7 +1038,14 @@
     // Handy when the player is included as a script rather than an iframe.
     window.WLPlayer = { load: load, download: downloadNow, stop: stop, api: streamUrl };
 
-    if (readFlag('embed') === '1') el.topbar.classList.add('is-embedded');
+    if (isEmbedded()) {
+        el.topbar.classList.add('is-embedded');
+        if (el.controls) el.controls.classList.add('is-embedded');
+    }
+
+    updatePlayIcon();
+    updateVolumeUI();
+    updateSeekUI();
 
     load({});
 })();

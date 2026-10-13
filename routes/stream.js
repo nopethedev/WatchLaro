@@ -13,10 +13,17 @@ const magnetCache = new NodeCache({ stdTTL: 3600, checkPeriod: 600 });
 const keyFor = (id, season, episode) =>
     season && episode ? `tv:${id}:${season}:${episode}` : `movie:${id}`;
 
+/** One-line request target for logs, e.g. `id=123 season=1 episode=2`. */
+const describeTarget = (id, season, episode) =>
+    season && episode ? `id=${id} season=${season} episode=${episode}` : `id=${id}`;
+
 async function resolveMagnet(id, season, episode) {
     const key = keyFor(id, season, episode);
     const cached = magnetCache.get(key);
-    if (cached) return cached;
+    if (cached) {
+        console.log(`[stream] magnet cache hit for ${key}`);
+        return cached;
+    }
 
     let query;
     if (season && episode) {
@@ -24,11 +31,21 @@ async function resolveMagnet(id, season, episode) {
     } else {
         query = await tmdb.buildMovieQuery(String(id));
     }
-    if (!query || query.includes('undefined')) return null;
+    if (!query || query.includes('undefined')) {
+        console.log(`[stream] no TMDB query for ${key}`);
+        return null;
+    }
+    const isSeries = Boolean(season && episode);
+    console.log(`[search] TMDB query: "${query}" (${key})`);
 
-    const results = await downloader.search(query, { limit: 20 });
+    const results = await downloader.search(query, isSeries ? { limit: 20, sort: 'seeders' } : { limit: 20 });
     const magnet = results?.[0]?.magnet ?? null;
-    if (magnet) magnetCache.set(key, magnet);
+    if (magnet) {
+        magnetCache.set(key, magnet);
+        console.log(`[stream] magnet resolved ${String(magnet).slice(0, 30)}... for ${key}`);
+    } else {
+        console.log(`[stream] no magnet found for ${key} (query: "${query}")`);
+    }
     return magnet;
 }
 
@@ -65,6 +82,7 @@ function serveFinishedFile(req, res, outputFile) {
                     'Content-Length': end - start + 1,
                     'Content-Range': `bytes ${start}-${end}/${size}`,
                 });
+                console.log(`[stream] serving finished "${path.basename(outputFile)}" 206 bytes ${start}-${end}/${size}`);
                 fs.createReadStream(abs, { start, end }).pipe(res);
                 return true;
             }
@@ -75,6 +93,7 @@ function serveFinishedFile(req, res, outputFile) {
     }
 
     res.writeHead(200, { 'Content-Length': size });
+    console.log(`[stream] serving finished "${path.basename(outputFile)}" 200 full file (${size} bytes)`);
     fs.createReadStream(abs).pipe(res);
     return true;
 }
@@ -82,6 +101,7 @@ function serveFinishedFile(req, res, outputFile) {
 async function handleStream(req, res) {
     const { id, season, episode } = req.params;
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
+    console.log(`[stream] incoming stream request ${describeTarget(id, season, episode)}`);
     try {
         const magnet = await resolveMagnet(id, season, episode);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
@@ -92,7 +112,52 @@ async function handleStream(req, res) {
             if (prog?.outputFile && serveFinishedFile(req, res, prog.outputFile)) return;
         } catch { /* fall through to live torrent streaming */ }
 
+        // Idle timeout is 10m here; the downloader default is configurable via DOWNLOADER_TIMEOUT_MIN.
         await downloader.stream(magnet, req, res, { timeoutMin: 10 });
+    } catch (err) {
+        console.error('[stream]', err.message);
+        if (!res.headersSent) res.status(500).json({ status: 'error', error: err.message });
+    }
+}
+
+/** Serve a downloaded subtitle sidecar as WebVTT. */
+async function handleSubs(req, res) {
+    const { id, season, episode } = req.params;
+    const lang = String(req.query.lang || '').toLowerCase().trim();
+    if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
+    console.log(`[stream] incoming subs request ${describeTarget(id, season, episode)}${lang ? ` lang=${lang}` : ''}`);
+    try {
+        const magnet = await resolveMagnet(String(id), season, episode);
+        if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
+
+        const prog = downloader.getProgress(magnet);
+        const subs = Array.isArray(prog?.subtitles) ? prog.subtitles : [];
+        if (!subs.length) {
+            console.log(`[stream] no subtitles for ${describeTarget(id, season, episode)}`);
+            return res.status(404).json({ status: 'error', error: 'no subtitles available' });
+        }
+
+        // Prefer the requested lang (code or filename fragment), else the first.
+        const pick = (lang && subs.find((s) =>
+            String(s.lang || '').toLowerCase() === lang ||
+            String(s.name || '').toLowerCase().includes(lang))) || subs[0];
+
+        const abs = downloader.findSubtitleFile(magnet, pick.name);
+        if (!abs) {
+            console.log(`[stream] subtitle "${pick.name}" not on disk for ${describeTarget(id, season, episode)}`);
+            return res.status(404).json({ status: 'error', error: 'no subtitles available' });
+        }
+
+        const ext = path.extname(abs).toLowerCase();
+        const raw = fs.readFileSync(abs, 'utf8');
+        // SRT is converted (comma timestamps -> dots + WEBVTT header);
+        // .vtt passes through, .ass/.ssa are served as-is.
+        const body = ext === '.srt' ? downloader.srtToVtt(raw) : raw;
+
+        res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        console.log(`[stream] serving subtitles "${pick.name}" as VTT for ${describeTarget(id, season, episode)}`);
+        res.send(body);
     } catch (err) {
         console.error('[stream]', err.message);
         if (!res.headersSent) res.status(500).json({ status: 'error', error: err.message });
@@ -102,6 +167,7 @@ async function handleStream(req, res) {
 async function handleDownload(req, res) {
     const { id, season, episode } = req.params;
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
+    console.log(`[stream] incoming download request ${describeTarget(id, season, episode)}`);
     try {
         const magnet = await resolveMagnet(id, season, episode);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
@@ -125,6 +191,7 @@ async function handleDownload(req, res) {
 // before /:id or "progress" gets swallowed as an id.
 router.get('/api/stream/progress', async (req, res) => {
     const { id, season, episode } = req.query;
+    console.log(`[stream] incoming progress request ${describeTarget(id, season, episode)}`);
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
     try {
         const magnet = await resolveMagnet(String(id), season, episode);
@@ -134,6 +201,11 @@ router.get('/api/stream/progress', async (req, res) => {
         res.status(500).json({ status: 'error', error: err.message });
     }
 });
+
+// GET {api}/stream/subs/{id}[/{season}/{episode}][?lang=] - WebVTT subtitles.
+// Registered before /:id so "subs" is not swallowed as an id.
+router.get('/api/stream/subs/:id', handleSubs);
+router.get('/api/stream/subs/:id/:season/:episode', handleSubs);
 
 // GET {api}/stream/{id}[/{season}/{episode}] - video, range requests
 router.get('/api/stream/:id', handleStream);
@@ -147,11 +219,19 @@ router.get('/api/stream/download/:id', handleDownload);
 router.get('/api/stream/download/:id/:season/:episode', handleDownload);
 
 // Optional heartbeat - keeps the torrent alive during long watches (?heartbeat=1).
+// Successful pings are silent (one per viewer per minute is spam); only
+// failures are logged.
 router.post('/api/stream/heartbeat', (req, res) => {
     const { id, season, episode } = req.query;
-    if (!id) return res.status(400).json({ ok: false, status: 'idle' });
+    if (!id) {
+        console.log('[heartbeat] rejected: missing id');
+        return res.status(400).json({ ok: false, status: 'idle' });
+    }
     const magnet = magnetCache.get(keyFor(String(id), season, episode));
-    if (!magnet) return res.status(404).json({ ok: false, status: 'idle' });
+    if (!magnet) {
+        console.log(`[heartbeat] unknown magnet for ${describeTarget(id, season, episode)}`);
+        return res.status(404).json({ ok: false, status: 'idle' });
+    }
     res.json(downloader.heartbeat(magnet));
 });
 

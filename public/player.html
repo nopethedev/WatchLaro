@@ -7,82 +7,149 @@
     <title>Player</title>
     <link rel="stylesheet" href="/styles.css">
     <style>
-        /* Only what Tailwind utilities cannot express. */
-        html, body { height: 100%; margin: 0; background: #020617; overflow: hidden; }
+        /* Self-contained Netflix-style skin. Core layout lives here so the
+           player renders correctly even if /styles.css 404s. */
+        html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 
         /* Tailwind sets display on .flex/.block, which beats the UA [hidden] rule. */
         [hidden] { display: none !important; }
 
-        #wl-video { object-fit: contain; }
+        #wl-player { position: relative; width: 100%; height: 100%; background: #000; color: #fff; overflow: hidden; user-select: none; -webkit-user-select: none; }
+        #wl-player.is-idle { cursor: none; }
+        #wl-player.is-idle #wl-controls, #wl-player.is-idle #wl-topbar { opacity: 0; pointer-events: none; }
 
-        #wl-popcorn { animation: wl-bounce 1.4s ease-in-out infinite; }
-        #wl-overlay.is-error #wl-popcorn { animation: none; filter: grayscale(1); opacity: .45; }
+        #wl-video { display: block; width: 100%; height: 100%; background: #000; object-fit: contain; }
 
-        @keyframes wl-bounce {
-            0%, 100% { transform: translateY(0) rotate(-6deg); }
-            50% { transform: translateY(-10px) rotate(6deg); }
+        /* ---- top bar ---- */
+        #wl-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; gap: 10px; padding: 12px 14px 28px; background: linear-gradient(to bottom, rgba(0,0,0,.85), transparent); opacity: 1; transition: opacity .25s ease; }
+        #wl-topbar.is-hidden-fallback { opacity: 0; pointer-events: none; }
+        #wl-player:hover #wl-topbar.is-hidden-fallback { opacity: 1; pointer-events: auto; }
+        #wl-topbar.is-embedded { opacity: 1 !important; pointer-events: auto !important; }
+        #wl-back { flex: 0 0 auto; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: #fff; font-size: 22px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+        #wl-back:hover { background: rgba(255,255,255,.14); }
+        #wl-badge { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; color: #f5f5f5; }
+        .wl-pill { flex: 0 0 auto; border-radius: 999px; font-size: 12px; font-weight: 700; padding: 7px 14px; cursor: pointer; transition: background .15s ease, opacity .15s ease; white-space: nowrap; }
+        .wl-pill:disabled { opacity: .5; cursor: default; }
+        #wl-download { background: #3B82F6; border: 1px solid #3B82F6; color: #fff; }
+        #wl-download:hover:not(:disabled) { background: #3B82F6; }
+        #wl-reload { background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.28); color: #e5e5e5; }
+        #wl-reload:hover { background: rgba(255,255,255,.20); }
+
+        /* ---- loading / error overlay ---- */
+        #wl-overlay { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: rgba(0,0,0,.93); }
+        #wl-popcorn { width: 54px; height: 54px; box-sizing: border-box; border-radius: 50%; border: 4px solid rgba(59,130,246,.25); border-top-color: #3B82F6; animation: wl-spin .9s linear infinite; }
+        #wl-overlay.is-error #wl-popcorn { animation: none; border-color: #3a3a3a; color: #3B82F6; font-size: 28px; font-weight: 800; line-height: 46px; text-align: center; }
+        @keyframes wl-spin { to { transform: rotate(360deg); } }
+        #wl-heading { font-size: 18px; font-weight: 700; color: #fff; margin: 0; }
+        #wl-heading .wl-red { color: #3B82F6; }
+        #wl-sub { font-size: 13px; color: #8e8e8e; margin: 4px 0 0; }
+        #wl-track { width: min(420px, 80%); height: 4px; border-radius: 999px; background: #333; overflow: hidden; }
+        #wl-bar { height: 100%; width: 0; border-radius: 999px; background: #3B82F6; transition: width .3s ease; }
+        #wl-bar.is-indeterminate { width: 40% !important; animation: wl-slide 1.2s ease-in-out infinite; }
+        @keyframes wl-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+        #wl-meta { width: min(420px, 80%); display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #8e8e8e; }
+        #wl-retry { background: #3B82F6; border: 1px solid #3B82F6; color: #fff; font-size: 14px; font-weight: 700; padding: 9px 22px; border-radius: 999px; cursor: pointer; }
+        #wl-retry:hover { background: #3B82F6; }
+
+        /* ---- bottom control bar ---- */
+        #wl-controls { position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; padding: 26px 16px 12px; background: linear-gradient(to top, rgba(0,0,0,.9), transparent); opacity: 1; transition: opacity .25s ease; }
+        #wl-controls.is-embedded { opacity: 1 !important; pointer-events: auto !important; }
+        #wl-seek { display: block; width: 100%; margin: 0 0 8px; padding: 0; height: 14px; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+        #wl-seek::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: linear-gradient(to right, #3B82F6 var(--fill, 0%), #4d4d4d var(--fill, 0%)); }
+        #wl-seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 13px; height: 13px; margin-top: -4.5px; border-radius: 50%; background: #3B82F6; border: 0; }
+        #wl-seek::-moz-range-track { height: 4px; border-radius: 999px; background: #4d4d4d; }
+        #wl-seek::-moz-range-progress { height: 4px; border-radius: 999px; background: #3B82F6; }
+        #wl-seek::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: #3B82F6; border: 0; }
+        #wl-row { display: flex; align-items: center; gap: 6px; }
+        #wl-left { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+        #wl-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+        .wl-btn { width: 36px; height: 36px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; border-radius: 50%; color: #fff; font-size: 17px; line-height: 1; cursor: pointer; padding: 0; position: relative; }
+        .wl-btn:hover { background: rgba(255,255,255,.14); }
+        .wl-btn:focus-visible { outline: 2px solid #3B82F6; outline-offset: 1px; }
+        #wl-play { font-size: 21px; width: 42px; }
+        .wl-skip { font-size: 15px; letter-spacing: -.5px; }
+        .wl-skip small { font-size: 9px; font-weight: 800; margin-left: 1px; }
+        #wl-mute.is-muted { opacity: .55; }
+        #wl-mute.is-muted::after { content: ""; position: absolute; left: 7px; right: 7px; top: 50%; height: 2px; background: #3B82F6; transform: rotate(-45deg); border-radius: 2px; }
+        #wl-ctitle { flex: 1 1 auto; min-width: 0; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: #f5f5f5; }
+        #wl-remaining { font-size: 12px; color: #d2d2d2; white-space: nowrap; font-variant-numeric: tabular-nums; margin-right: 4px; }
+        #wl-vol-wrap { display: flex; align-items: center; }
+        #wl-volume { width: 64px; height: 12px; -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; padding: 0; margin: 0; }
+        #wl-volume::-webkit-slider-runnable-track { height: 3px; border-radius: 999px; background: linear-gradient(to right, #fff var(--fill, 100%), #4d4d4d var(--fill, 100%)); }
+        #wl-volume::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; margin-top: -3.5px; border-radius: 50%; background: #fff; border: 0; }
+        #wl-volume::-moz-range-track { height: 3px; border-radius: 999px; background: #4d4d4d; }
+        #wl-volume::-moz-range-progress { height: 3px; border-radius: 999px; background: #fff; }
+        #wl-volume::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 0; }
+        .wl-cc { font-size: 11px !important; font-weight: 800; letter-spacing: .5px; border: 1.5px solid currentColor; border-radius: 5px; width: 32px !important; height: 24px !important; }
+
+        #wl-toast { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); z-index: 30; max-width: 90%; text-align: center; font-size: 12px; color: #fff; background: rgba(20,20,20,.95); border: 1px solid #3a3a3a; padding: 8px 14px; border-radius: 8px; }
+
+        @media (max-width: 560px) {
+            #wl-volume { display: none; }
+            #wl-ctitle { display: none; }
+            #wl-badge { font-size: 13px; }
         }
-
-        #wl-bar.is-indeterminate { width: 40%; animation: wl-slide 1.2s ease-in-out infinite; }
-        @keyframes wl-slide {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(250%); }
-        }
-
-        #wl-topbar { opacity: 0; pointer-events: none; transition: opacity .2s ease; }
-        #wl-player:hover #wl-topbar, #wl-topbar.is-embedded { opacity: 1; pointer-events: auto; }
     </style>
 </head>
 
 <body>
-    <div id="wl-player" class="group relative w-full h-full bg-black select-none">
-        <video id="wl-video" class="block w-full h-full bg-black" playsinline preload="metadata" controls></video>
+    <div id="wl-player">
+        <video id="wl-video" playsinline preload="metadata"></video>
 
-        <!-- title + download, revealed on hover (or always when embedded) -->
-        <div id="wl-topbar"
-            class="absolute top-0 inset-x-0 z-10 flex items-center justify-between gap-3 px-3 py-2.5 bg-gradient-to-b from-slate-950/90 to-transparent">
-            <span id="wl-badge" class="text-sm font-semibold text-slate-200 truncate"></span>
-            <div class="flex items-center gap-2 shrink-0">
-                <button id="wl-download" type="button"
-                    class="bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-default text-white text-xs font-semibold px-3 py-1.5 rounded-md transition-colors">
-                    Download
-                </button>
-                <button id="wl-reload" type="button"
-                    class="bg-blue-700/20 hover:bg-blue-500/40 border border-blue-700 text-blue-100 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors">
-                    Restart
-                </button>
-            </div>
+        <!-- top bar: back arrow + title + download/restart pills -->
+        <div id="wl-topbar">
+            <button id="wl-back" type="button" aria-label="Go back">&#8592;</button>
+            <span id="wl-badge"></span>
+            <button id="wl-download" type="button" class="wl-pill">Download</button>
+            <button id="wl-reload" type="button" class="wl-pill">Restart</button>
         </div>
 
-        <!-- popcorn / progress / error state -->
-        <div id="wl-overlay"
-            class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 p-6 text-center bg-slate-950/95">
-            <div id="wl-popcorn" class="text-6xl leading-none">&#127871;</div>
+        <!-- loading / progress / error state -->
+        <div id="wl-overlay">
+            <div id="wl-popcorn" role="status" aria-label="Loading"></div>
 
             <div>
-                <p id="wl-heading" class="text-lg font-bold text-white m-0">Grabbing popcorn&hellip;</p>
-                <p id="wl-sub" class="text-sm text-slate-400 mt-1">We&rsquo;re preparing your show</p>
+                <p id="wl-heading">Grabbing popcorn&hellip;</p>
+                <p id="wl-sub">We&rsquo;re preparing your show</p>
             </div>
 
-            <div class="w-full max-w-sm">
-                <div class="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
-                    <div id="wl-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-blue-700 to-blue-400 transition-all duration-300"></div>
-                </div>
-                <div class="flex items-center justify-between text-xs text-slate-400 mt-2">
-                    <span id="wl-stage">Connecting&hellip;</span>
-                    <span id="wl-pct"></span>
-                </div>
+            <div id="wl-track">
+                <div id="wl-bar"></div>
+            </div>
+            <div id="wl-meta">
+                <span id="wl-stage">Connecting&hellip;</span>
+                <span id="wl-pct"></span>
             </div>
 
-            <button id="wl-retry" type="button" hidden
-                class="bg-blue-700 hover:bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-md transition-colors">
-                Try again
-            </button>
+            <button id="wl-retry" type="button" hidden>Try again</button>
         </div>
 
-        <div id="wl-toast" hidden
-            class="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[90%] text-center text-xs text-white bg-slate-800 border border-blue-700 px-3.5 py-2 rounded-lg">
+        <!-- bottom Netflix-style control bar -->
+        <div id="wl-controls">
+            <input id="wl-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+            <div id="wl-row">
+                <div id="wl-left">
+                    <button id="wl-play" type="button" class="wl-btn" aria-label="Play or pause">&#9654;</button>
+                    <button id="wl-back10" type="button" class="wl-btn wl-skip" aria-label="Back 10 seconds">&#10226;<small>10</small></button>
+                    <button id="wl-fwd10" type="button" class="wl-btn wl-skip" aria-label="Forward 10 seconds"><small>10</small>&#10227;</button>
+                    <button id="wl-mute" type="button" class="wl-btn" aria-label="Mute or unmute">&#9834;</button>
+                    <span id="wl-vol-wrap"><input id="wl-volume" type="range" min="0" max="100" value="100" step="1" aria-label="Volume"></span>
+                    <span id="wl-ctitle"></span>
+                </div>
+                <div id="wl-right">
+                    <span id="wl-remaining">--:--</span>
+                    <button id="wl-next" type="button" class="wl-btn" aria-label="Next episode">&#9654;|</button>
+                    <button id="wl-eps" type="button" class="wl-btn" aria-label="Episodes list">&#9776;</button>
+                    <button id="wl-subs" type="button" class="wl-btn wl-cc" aria-label="Subtitles">CC</button>
+                    <button id="wl-full" type="button" class="wl-btn" aria-label="Fullscreen">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" /></svg>
+                    </button>
+                </div>
+            </div>
         </div>
+
+        <div id="wl-toast" hidden></div>
     </div>
 
     <script src="/player.js"></script>

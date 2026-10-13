@@ -20,6 +20,7 @@ import * as userHandler from "./handlers/usersHandler.js"
 import { profile } from "console";
 import createAdminAccount from "./handlers/createAdminAccount.js";
 import routes from "./routes/index.js";
+import tmdb from "./handlers/downloader/tmdb.js";
 
 //Init Database First
 await initDB();
@@ -95,7 +96,16 @@ app.get('/movies/search', async (req, res) => {
     res.render('movies/search.ejs')
 });
 app.get('/movies/m', async (req, res) => {
-    res.render('movies/m.ejs', { embed: "https://de.laro.voidcities.xyz/embedv2?id=" + req.query.q })
+    const q = String(req.query.q || '');
+    let title = '';
+    try {
+        const info = await tmdb.movieInfo(q);
+        if (info?.title) title = info.title;
+    } catch { /* title stays empty, player still works on id alone */ }
+    const embed = "/player.html?id=" + encodeURIComponent(q)
+        + (title ? "&title=" + encodeURIComponent(title) : '')
+        + "&auto=1&embed=1";
+    res.render('movies/m.ejs', { embed, title })
 });
 app.get('/movies/info', async (req, res) => {
     res.render(path.join(__dirname, 'views', 'movies', 'info.ejs'));
@@ -114,7 +124,17 @@ app.get('/tv/:id/:season', async (req, res) => {
 })
 
 app.get('/tv/:id/:season/:episode', async (req, res) => {
-    res.render(path.join(__dirname, "views", "tv", "watch.ejs"), { embed: "https://de.laro.voidcities.xyz/tv/embedv2?id=" + req.params.id + "&season=" + req.params.season + "&episode=" + req.params.episode })
+    const { id, season, episode } = req.params;
+    let title = '';
+    try {
+        const info = await tmdb.tvInfo(id);
+        if (info?.name) title = info.name;
+    } catch { /* title stays empty, player still works on ids alone */ }
+    const embed = "/player.html?id=" + encodeURIComponent(id)
+        + "&season=" + encodeURIComponent(season) + "&episode=" + encodeURIComponent(episode)
+        + (title ? "&title=" + encodeURIComponent(title) : '')
+        + "&auto=1&embed=1";
+    res.render(path.join(__dirname, "views", "tv", "watch.ejs"), { embed, title })
 })
 //apis
 
