@@ -17,7 +17,7 @@
 
         #wl-player { position: relative; width: 100%; height: 100%; background: #000; color: #fff; overflow: hidden; user-select: none; -webkit-user-select: none; }
         #wl-player.is-idle { cursor: none; }
-        #wl-player.is-idle #wl-controls, #wl-player.is-idle #wl-topbar { opacity: 0; pointer-events: none; }
+        #wl-player.is-idle #wl-controls, #wl-player.is-idle #wl-topbar, #wl-player.is-idle #wl-tv-ui { opacity: 0; pointer-events: none; }
 
         #wl-video { display: block; width: 100%; height: 100%; background: #000; object-fit: contain; }
 
@@ -83,12 +83,348 @@
         #wl-volume::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 0; }
         .wl-cc { font-size: 11px !important; font-weight: 800; letter-spacing: .5px; border: 1.5px solid currentColor; border-radius: 5px; width: 32px !important; height: 24px !important; }
 
+        /* ============================================================== *
+           TV skin (?tvui=1): ten-foot layout modelled on the Netflix TV
+           player - options top-left, title top-right, big play button and
+           a wide blue progress bar at the bottom, pill actions underneath.
+           ============================================================== */
+
+        #wl-player.is-tv #wl-topbar,
+        #wl-player.is-tv #wl-controls { display: none !important; }
+
+        #wl-tv-ui {
+            position: absolute;
+            inset: 0;
+            z-index: 12;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            opacity: 1;
+            transition: opacity .3s ease;
+            pointer-events: none;
+        }
+
+        #wl-tv-top {
+            display: flex;
+            align-items: flex-start;
+            gap: 2rem;
+            padding: 2.4rem 3rem 4.5rem;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, .82), transparent);
+        }
+
+        .wl-tv-top-left {
+            display: flex;
+            flex-direction: column;
+            gap: .55rem;
+        }
+
+        .wl-tv-icon-row {
+            display: flex;
+            align-items: center;
+            gap: 1.1rem;
+        }
+
+        .wl-tv-icon {
+            width: 3.5rem;
+            height: 3.5rem;
+            display: grid;
+            place-items: center;
+            padding: 0;
+            border: 2px solid transparent;
+            border-radius: 50%;
+            background: transparent;
+            color: #fff;
+            font-size: 1.55rem;
+            line-height: 1;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: background .15s ease, border-color .15s ease;
+        }
+
+        .wl-tv-icon svg { width: 2rem; height: 2rem; }
+        #wl-tv-back svg { width: 2.35rem; height: 2.35rem; }
+
+        .wl-tv-icon:hover { background: rgba(255, 255, 255, .16); }
+        .wl-tv-icon:focus { outline: none; border-color: #fff; background: rgba(255, 255, 255, .2); }
+
+        .wl-tv-icon small {
+            font-size: .58rem;
+            font-weight: 800;
+            margin-left: .08rem;
+            align-self: center;
+        }
+
+        .wl-tv-icon.wl-tv-skip { display: inline-flex; align-items: center; justify-content: center; }
+
+        .wl-tv-label {
+            padding-left: .4rem;
+            font-size: .8rem;
+            font-weight: 700;
+            letter-spacing: .18em;
+            color: #e9e9e9;
+        }
+
+        #wl-tv-meta {
+            margin-left: auto;
+            max-width: 46%;
+            display: flex;
+            flex-direction: column;
+            gap: .3rem;
+            text-align: right;
+            text-shadow: 0 .15rem .7rem rgba(0, 0, 0, .75);
+        }
+
+        #wl-tv-title {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -.01em;
+        }
+
+        #wl-tv-sub {
+            font-size: 1.08rem;
+            font-weight: 600;
+            color: #e7e7e7;
+        }
+
+        #wl-tv-sub:empty { display: none; }
+
+        #wl-tv-bottom {
+            padding: 4rem 3rem 2.2rem;
+            background: linear-gradient(to top, rgba(0, 0, 0, .92), rgba(0, 0, 0, .45) 55%, transparent);
+        }
+
+        .wl-tv-progress {
+            display: flex;
+            align-items: center;
+            gap: 1.35rem;
+        }
+
+        /* The TV layer is a click-through shell; its controls opt back in. */
+        #wl-tv-play,
+        #wl-tv-seek { pointer-events: auto; }
+
+        #wl-tv-play {
+            flex: 0 0 auto;
+            width: 4.6rem;
+            height: 4.6rem;
+            display: grid;
+            place-items: center;
+            padding: 0;
+            border: 3px solid transparent;
+            border-radius: 50%;
+            background: #fff;
+            color: #000;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+            transition: transform .15s ease, border-color .15s ease;
+        }
+
+        #wl-tv-play:focus { outline: none; border-color: #3B82F6; transform: scale(1.06); }
+
+        .wl-tv-time {
+            flex: 0 0 auto;
+            min-width: 3.9rem;
+            font-size: 1.05rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: #fff;
+        }
+
+        #wl-tv-current { text-align: right; }
+        #wl-tv-remaining { text-align: left; color: #dcdcdc; }
+
+        #wl-tv-seek {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 22px;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+        }
+
+        #wl-tv-seek::-webkit-slider-runnable-track { height: 5px; border-radius: 999px; background: linear-gradient(to right, #3B82F6 var(--fill, 0%), rgba(255, 255, 255, .38) var(--fill, 0%)); }
+        #wl-tv-seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 50%; background: #fff; border: 0; }
+        #wl-tv-seek::-moz-range-track { height: 5px; border-radius: 999px; background: rgba(255, 255, 255, .38); }
+        #wl-tv-seek::-moz-range-progress { height: 5px; border-radius: 999px; background: #3B82F6; }
+        #wl-tv-seek::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 0; }
+        #wl-tv-seek:focus { outline: 2px solid #3B82F6; outline-offset: 6px; border-radius: 999px; }
+
+        #wl-tv-pills {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: .8rem;
+            margin-top: 1.45rem;
+        }
+
+        .wl-tv-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            padding: .4rem .95rem;
+            border: 2px solid transparent;
+            border-radius: 999px;
+            background: rgba(44, 44, 54, .82);
+            color: #f1f1f5;
+            font: inherit;
+            font-size: .84rem;
+            font-weight: 600;
+            line-height: 1.1;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: background .15s ease, color .15s ease, border-color .15s ease;
+        }
+
+        .wl-tv-pill svg { flex: 0 0 auto; opacity: .9; }
+
+        .wl-tv-pill:hover { background: rgba(80, 80, 94, .95); }
+        .wl-tv-pill:focus { outline: none; border-color: #fff; background: #fff; color: #000; }
+        .wl-tv-pill.is-active { background: rgba(59, 130, 246, .92); }
+        .wl-tv-pill.is-active:focus { background: #fff; color: #000; }
+
+        #wl-tv-full {
+            width: 2.35rem;
+            height: 2.35rem;
+            padding: 0;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+        }
+
+        #wl-tv-full svg { width: 1rem; height: 1rem; }
+
+        /* ---- options sheet (server picker) ---- */
+        #wl-tv-sheet {
+            position: absolute;
+            inset: 0;
+            z-index: 18;
+            display: grid;
+            place-items: center;
+            padding: 3rem;
+            background: rgba(0, 0, 0, .7);
+        }
+
+        .wl-sheet-card {
+            width: min(50rem, 92vw);
+            padding: 2rem 2.2rem 1.7rem;
+            border: 1px solid rgba(255, 255, 255, .14);
+            border-radius: 1rem;
+            background: rgba(17, 17, 23, .97);
+            box-shadow: 0 2rem 5rem rgba(0, 0, 0, .7);
+        }
+
+        .wl-sheet-kicker {
+            margin: 0 0 .25rem;
+            color: #7fa7f0;
+            font-size: .7rem;
+            font-weight: 800;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+        }
+
+        .wl-sheet-title {
+            margin: 0;
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -.02em;
+        }
+
+        .wl-sheet-status {
+            margin: .3rem 0 1rem;
+            color: #9c9cae;
+            font-size: .9rem;
+        }
+
+        .wl-sheet-list {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .5rem;
+            min-height: 2.6rem;
+        }
+
+        .wl-sheet-server {
+            padding: .5rem 1.05rem;
+            border: 2px solid transparent;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .1);
+            color: #fff;
+            font: inherit;
+            font-size: .92rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background .15s ease, color .15s ease;
+        }
+
+        .wl-sheet-server:focus { outline: none; border-color: #fff; background: #fff; color: #000; }
+        .wl-sheet-server.is-active { background: rgba(59, 130, 246, .9); }
+        .wl-sheet-server.is-active:focus { background: #fff; color: #000; }
+
+        .wl-sheet-hint {
+            margin: 1.1rem 0 1.3rem;
+            color: #8d8d9f;
+            font-size: .78rem;
+            line-height: 1.45;
+        }
+
+        .wl-sheet-list .wl-sheet-hint { margin: 0; }
+
+        .wl-sheet-close {
+            padding: .48rem 1.3rem;
+            border: 2px solid rgba(255, 255, 255, .3);
+            border-radius: 999px;
+            background: transparent;
+            color: #fff;
+            font: inherit;
+            font-size: .88rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .wl-sheet-close:focus { outline: none; border-color: #fff; background: #fff; color: #000; }
+
         #wl-toast { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); z-index: 30; max-width: 90%; text-align: center; font-size: 12px; color: #fff; background: rgba(20,20,20,.95); border: 1px solid #3a3a3a; padding: 8px 14px; border-radius: 8px; }
 
         @media (max-width: 560px) {
             #wl-volume { display: none; }
             #wl-ctitle { display: none; }
             #wl-badge { font-size: 13px; }
+        }
+
+        /* Ten-foot layout: scale the TV skin up on living-room sized screens. */
+        @media (min-width: 1200px) {
+            #wl-tv-top { padding: 3rem 4rem 5.5rem; }
+            .wl-tv-icon { width: 4.2rem; height: 4.2rem; font-size: 1.85rem; }
+            .wl-tv-icon svg { width: 2.4rem; height: 2.4rem; }
+            #wl-tv-back svg { width: 2.9rem; height: 2.9rem; }
+            .wl-tv-label { font-size: .95rem; }
+            #wl-tv-title { font-size: 1.9rem; }
+            #wl-tv-sub { font-size: 1.35rem; }
+            #wl-tv-bottom { padding: 5rem 4rem 2.6rem; }
+            #wl-tv-play { width: 5.6rem; height: 5.6rem; font-size: 1.9rem; }
+            .wl-tv-time { font-size: 1.25rem; min-width: 4.8rem; }
+            #wl-tv-seek { height: 26px; }
+            #wl-tv-seek::-webkit-slider-runnable-track { height: 6px; }
+            #wl-tv-seek::-webkit-slider-thumb { width: 19px; height: 19px; margin-top: -6.5px; }
+            #wl-tv-seek::-moz-range-track,
+            #wl-tv-seek::-moz-range-progress { height: 6px; }
+            #wl-tv-seek::-moz-range-thumb { width: 19px; height: 19px; }
+            .wl-tv-pill { font-size: .95rem; padding: .48rem 1.1rem; }
+            #wl-tv-pills { gap: .7rem; margin-top: 1.5rem; }
+            #wl-tv-full { width: 2.7rem; height: 2.7rem; }
+            #wl-tv-full svg { width: 1.15rem; height: 1.15rem; }
+            .wl-sheet-card { padding: 2.5rem 2.7rem 2rem; }
+            .wl-sheet-title { font-size: 2rem; }
+            .wl-sheet-kicker { font-size: .8rem; }
+            .wl-sheet-status { font-size: 1rem; }
+            .wl-sheet-server { font-size: 1.05rem; padding: .6rem 1.25rem; }
+            .wl-sheet-close { font-size: 1rem; }
+            .wl-sheet-hint { font-size: .9rem; }
         }
     </style>
 </head>
@@ -146,6 +482,77 @@
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" /></svg>
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <!-- TV skin controls (shown for player.html?tvui=1) -->
+        <div id="wl-tv-ui" hidden>
+            <div id="wl-tv-top">
+                <div class="wl-tv-top-left">
+                    <div class="wl-tv-icon-row">
+                        <button id="wl-tv-back" class="wl-tv-icon" type="button" aria-label="Go back">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M19 12H5M11 18l-6-6 6-6" />
+                            </svg>
+                        </button>
+                        <button id="wl-tv-rewind" class="wl-tv-icon wl-tv-skip" type="button"
+                            aria-label="Back 10 seconds">&#10226;<small>10</small></button>
+                        <button id="wl-tv-forward" class="wl-tv-icon wl-tv-skip" type="button"
+                            aria-label="Forward 10 seconds"><small>10</small>&#10227;</button>
+                        <button id="wl-tv-next" class="wl-tv-icon wl-tv-skip" type="button"
+                            aria-label="Next episode">&#9654;|</button>
+                    </div>
+                    <div class="wl-tv-label">OPTIONS</div>
+                </div>
+
+                <div id="wl-tv-meta">
+                    <span id="wl-tv-title"></span>
+                    <span id="wl-tv-sub"></span>
+                </div>
+            </div>
+
+            <div id="wl-tv-bottom">
+                <div class="wl-tv-progress">
+                    <button id="wl-tv-play" type="button" aria-label="Play">&#9654;</button>
+                    <span id="wl-tv-current" class="wl-tv-time">0:00</span>
+                    <input id="wl-tv-seek" type="range" min="0" max="1000" value="0" step="1"
+                        aria-label="Seek">
+                    <span id="wl-tv-remaining" class="wl-tv-time">--:--</span>
+                </div>
+
+                <div id="wl-tv-pills">
+                    <button id="wl-tv-subs" class="wl-tv-pill" type="button">Subtitles: Off</button>
+                    <button id="wl-tv-options" class="wl-tv-pill" type="button">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                            <path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1" />
+                            <circle cx="15" cy="7" r="2" />
+                            <circle cx="9" cy="12" r="2" />
+                            <circle cx="17" cy="17" r="2" />
+                        </svg>
+                        Options
+                    </button>
+                    <button id="wl-tv-full" class="wl-tv-pill" type="button" aria-label="Fullscreen">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TV options sheet: server (magnet) picker, opened from the pills -->
+        <div id="wl-tv-sheet" hidden>
+            <div class="wl-sheet-card" role="dialog" aria-modal="true" aria-label="Playback options">
+                <p class="wl-sheet-kicker">Playback options</p>
+                <h2 class="wl-sheet-title">Server</h2>
+                <p class="wl-sheet-status" id="wl-tv-source">Server 1</p>
+                <div class="wl-sheet-list" id="wl-tv-source-list"></div>
+                <p class="wl-sheet-hint">Switching plays this title from another torrent. The previous one is
+                    removed once nobody is watching it.</p>
+                <button id="wl-tv-sheet-close" class="wl-sheet-close" type="button">Close</button>
             </div>
         </div>
 

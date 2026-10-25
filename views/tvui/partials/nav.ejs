@@ -1,0 +1,31 @@
+<nav class="tv-nav" data-tv-row data-tv-fixed aria-label="Main">
+    <a class="tv-logo" href="/tvui/home" tabindex="-1" aria-label="WatchLaro TV">
+        <span class="tv-logo-watch">Watch</span><span class="tv-logo-laro">Laro</span>
+    </a>
+
+    <div class="tv-nav-tabs">
+        <a class="tv-nav-tab <%= active === 'search' ? 'is-active' : '' %>" href="/tvui/search" data-tv-item
+            <%= active === 'search' ? 'data-tv-autofocus' : '' %>>
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Search</span>
+        </a>
+        <a class="tv-nav-tab <%= active === 'home' ? 'is-active' : '' %>" href="/tvui/home" data-tv-item
+            <%= (active === 'home' || active === '') ? 'data-tv-autofocus' : '' %>>
+            <i class="fa-solid fa-house" aria-hidden="true"></i><span>Home</span>
+        </a>
+        <a class="tv-nav-tab <%= active === 'movies' ? 'is-active' : '' %>" href="/tvui/movies" data-tv-item
+            <%= active === 'movies' ? 'data-tv-autofocus' : '' %>>
+            <i class="fa-solid fa-film" aria-hidden="true"></i><span>Movies</span>
+        </a>
+        <a class="tv-nav-tab <%= active === 'shows' ? 'is-active' : '' %>" href="/tvui/shows" data-tv-item
+            <%= active === 'shows' ? 'data-tv-autofocus' : '' %>>
+            <i class="fa-solid fa-tv" aria-hidden="true"></i><span>Shows</span>
+        </a>
+    </div>
+
+    <div class="tv-nav-right">
+        <span class="tv-nav-clock" id="tv-clock" aria-hidden="true"></span>
+        <a class="tv-nav-profile" href="/tvui/" title="Switch profile" aria-label="Guest profile" data-tv-item>
+            <span class="tv-avatar"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+        </a>
+    </div>
+</nav>

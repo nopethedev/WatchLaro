@@ -56,6 +56,38 @@ app.use((req, res, next) => {
     next(); // Proceed to the next middleware or route handler
 });
 
+// ---- TV mode ----
+// Televisions (and TV sticks/browsers) get the 10-foot UI under /tvui instead of
+// the mouse-sized site. `?tv=0` opts the device out for 30 days, `?tv=1` sends it
+// back; API calls, the player and static files are never redirected.
+const TV_USER_AGENT = /smart-?tv|smarttv|googletv|android ?tv|appletv|apple ?tv|fire ?tv|firetv|hbbtv|netcast|viera|bravia|tizen|web0s|webos|roku|crkey|playstation|xbox|opera ?tv|philipstv|hisense|skyworth|vestel|pov_tv|nettv|aquos|television|tv ?browser/i;
+
+function readCookie(req, name) {
+    const raw = req.headers.cookie || "";
+    const hit = raw.split(";").map((part) => part.trim()).find((part) => part.startsWith(name + "="));
+    return hit ? decodeURIComponent(hit.slice(name.length + 1)) : null;
+}
+
+app.use((req, res, next) => {
+    if (req.method !== "GET" || !req.accepts("html")) return next();
+    if (req.path.startsWith("/tvui") || req.path.startsWith("/api/")) return next();
+    if (req.path.startsWith("/player") || req.path.includes(".")) return next();
+
+    if (req.query.tv === "0") {
+        res.cookie("tvui", "0", { maxAge: 1000 * 60 * 60 * 24 * 30, httpOnly: true, sameSite: "lax" });
+        return next();
+    }
+    if (req.query.tv === "1") {
+        res.clearCookie("tvui");
+        return res.redirect("/tvui/");
+    }
+
+    const optedOut = readCookie(req, "tvui") === "0";
+    const isTV = TV_USER_AGENT.test(req.headers["user-agent"] || "");
+    if (!optedOut && isTV) return res.redirect("/tvui/");
+    next();
+});
+
 //routes
 routes.forEach(route => app.use(route));
 

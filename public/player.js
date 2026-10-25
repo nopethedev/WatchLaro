@@ -82,10 +82,31 @@
         next: document.getElementById('wl-next'),
         eps: document.getElementById('wl-eps'),
         subs: document.getElementById('wl-subs'),
-        full: document.getElementById('wl-full')
+        full: document.getElementById('wl-full'),
+
+        // TV skin (?tvui=1)
+        tvui: document.getElementById('wl-tv-ui'),
+        tvTitle: document.getElementById('wl-tv-title'),
+        tvSub: document.getElementById('wl-tv-sub'),
+        tvPlay: document.getElementById('wl-tv-play'),
+        tvSeek: document.getElementById('wl-tv-seek'),
+        tvCurrent: document.getElementById('wl-tv-current'),
+        tvRemaining: document.getElementById('wl-tv-remaining'),
+        tvPills: document.getElementById('wl-tv-pills'),
+        tvSource: document.getElementById('wl-tv-source'),
+        tvOptions: document.getElementById('wl-tv-options'),
+        tvSheet: document.getElementById('wl-tv-sheet'),
+        tvSourceList: document.getElementById('wl-tv-source-list'),
+        tvSheetClose: document.getElementById('wl-tv-sheet-close'),
+        tvSubs: document.getElementById('wl-tv-subs'),
+        tvFull: document.getElementById('wl-tv-full'),
+        tvBack: document.getElementById('wl-tv-back'),
+        tvRewind: document.getElementById('wl-tv-rewind'),
+        tvForward: document.getElementById('wl-tv-forward'),
+        tvNext: document.getElementById('wl-tv-next')
     };
 
-    var params = { id: null, season: null, episode: null, title: '' };
+    var params = { id: null, season: null, episode: null, title: '', episodeTitle: '' };
     var state = 'idle';           // idle | preparing | ready | error
     var pollTimer = null;
     var pollFailures = 0;
@@ -96,8 +117,15 @@
     var toastTimer = null;
     var idleTimer = null;
     var isScrubbing = false;
+    var bufferOverlayTimer = null;
     var subtitleTracks = [];   // [{ name, lang }] from info.subtitles, attached at ready
     var subtitleIndex = -1;    // -1 = off, else index into subtitleTracks
+
+    // TV skin: ten-foot layout with remote focus, and the server switcher.
+    var TV_MODE = readFlag('tvui') === '1';
+    var SESSION = 'wl-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
+    var switchingServer = false;
+    var pendingResume = 0;      // seconds to seek to once metadata is known
 
     /* ------------------------------------------------------------------ *
      * helpers
@@ -143,7 +171,8 @@
     }
 
     function streamUrl(id, season, episode) {
-        return API_BASE + '/stream/' + buildPath(id, season, episode);
+        var url = API_BASE + '/stream/' + buildPath(id, season, episode);
+        return TV_MODE ? url + '?session=' + encode(SESSION) : url;
     }
 
     function downloadUrl(id, season, episode) {
@@ -154,12 +183,16 @@
         var qs = ['id=' + encode(id)];
         if (season) qs.push('season=' + encode(season));
         if (episode) qs.push('episode=' + encode(episode));
+        if (TV_MODE) qs.push('session=' + encode(SESSION));
         return API_BASE + '/stream/progress?' + qs.join('&');
     }
 
     function subsUrl(id, season, episode, lang) {
         var url = API_BASE + '/stream/subs/' + buildPath(id, season, episode);
-        if (lang) url += '?lang=' + encode(lang);
+        var qs = [];
+        if (lang) qs.push('lang=' + encode(lang));
+        if (TV_MODE) qs.push('session=' + encode(SESSION));
+        if (qs.length) url += '?' + qs.join('&');
         return url;
     }
 
@@ -352,13 +385,15 @@
         showBars();
         clearTimeout(idleTimer);
         idleTimer = null;
-        if (isEmbedded()) return;
+        // Embeds keep the bar visible, except the TV skin, which behaves like
+        // a set-top box: controls fade while playing, any key brings them back.
+        if (isEmbedded() && !TV_MODE) return;
         var overlayOpen = el.overlay && !el.overlay.hidden;
         if (state === 'ready' && !overlayOpen && el.video && !el.video.paused && !el.video.ended) {
             idleTimer = setTimeout(function () {
                 var stillPlaying = state === 'ready' && el.video && !el.video.paused && !el.video.ended;
                 var overlayStillOpen = el.overlay && !el.overlay.hidden;
-                if (stillPlaying && !overlayStillOpen && !isEmbedded()) {
+                if (stillPlaying && !overlayStillOpen && (!isEmbedded() || TV_MODE)) {
                     el.player.classList.add('is-idle');
                 }
             }, IDLE_HIDE_MS);
@@ -366,10 +401,16 @@
     }
 
     function updatePlayIcon() {
-        if (!el.play || !el.video) return;
+        if (!el.video) return;
         var paused = el.video.paused || el.video.ended;
-        el.play.textContent = paused ? GLYPH_PLAY : GLYPH_PAUSE;
-        el.play.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+        if (el.play) {
+            el.play.textContent = paused ? GLYPH_PLAY : GLYPH_PAUSE;
+            el.play.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+        }
+        if (el.tvPlay) {
+            el.tvPlay.textContent = paused ? GLYPH_PLAY : GLYPH_PAUSE;
+            el.tvPlay.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+        }
     }
 
     function updateSeekUI() {
@@ -383,11 +424,16 @@
             if (!isScrubbing) el.seek.value = String(Math.round(ratio * SEEK_MAX));
             el.seek.style.setProperty('--fill', (ratio * 100).toFixed(2) + '%');
         }
+        if (el.tvSeek) {
+            if (!isScrubbing) el.tvSeek.value = String(Math.round(ratio * SEEK_MAX));
+            el.tvSeek.style.setProperty('--fill', (ratio * 100).toFixed(2) + '%');
+        }
         if (el.remaining) {
             el.remaining.textContent = (isFinite(duration) && duration > 0)
                 ? '-' + formatClock(duration - current)
                 : '--:--';
         }
+        setTvTimes(current, duration);
     }
 
     function updateVolumeUI() {
@@ -453,6 +499,7 @@
             el.video.appendChild(node);
             setTrackMode(index, 'disabled');
         });
+        setTvSubtitleLabel();
     }
 
     /** CC button: off -> track 1 -> track 2 -> ... -> off, with a toast each step. */
@@ -471,6 +518,7 @@
             subtitleIndex = -1;
             showToast('Subtitles off');
         }
+        setTvSubtitleLabel();
         pokeBars();
     }
 
@@ -527,7 +575,12 @@
             el.seek.value = '0';
             el.seek.style.setProperty('--fill', '0%');
         }
+        if (el.tvSeek) {
+            el.tvSeek.value = '0';
+            el.tvSeek.style.setProperty('--fill', '0%');
+        }
         if (el.remaining) el.remaining.textContent = '--:--';
+        setTvTimes(0, 0);
         updatePlayIcon();
         updateVolumeUI();
         showBars();
@@ -564,13 +617,23 @@
     function applyTitle() {
         var text = params.title || '';
         if (text && isSeries()) text += ' \u00b7 S' + params.season + 'E' + params.episode;
-        el.badge.textContent = text;
-        el.badge.title = text;
+        if (el.badge) {
+            el.badge.textContent = text;
+            el.badge.title = text;
+        }
         if (el.ctitle) {
             el.ctitle.textContent = text;
             el.ctitle.title = text;
         }
         document.title = text || 'Player';
+
+        if (el.tvTitle) el.tvTitle.textContent = params.title || 'Now playing';
+        if (el.tvSub) {
+            var sub = [];
+            if (isSeries()) sub.push('S' + params.season + ': E' + params.episode);
+            if (params.episodeTitle) sub.push('\u201C' + params.episodeTitle + '\u201D');
+            el.tvSub.textContent = sub.join(' ');
+        }
     }
 
     function setDownloadButton(mode) {
@@ -598,6 +661,21 @@
         }
         el.video.load();
         resetControlsUI();
+
+        // A server switch reloads the same title: pick up where it left off.
+        if (pendingResume > 0) {
+            var resumeAt = pendingResume;
+            pendingResume = 0;
+            var applyResume = function () {
+                if (!el.video || !isFinite(el.video.duration) || el.video.duration <= 0) return;
+                try {
+                    el.video.currentTime = Math.min(resumeAt, Math.max(0, el.video.duration - 2));
+                } catch (e) { /* not seekable yet */ }
+                el.video.removeEventListener('loadedmetadata', applyResume);
+                updateSeekUI();
+            };
+            el.video.addEventListener('loadedmetadata', applyResume);
+        }
 
         if (opts_autoplay()) {
             var attempt = el.video.play();
@@ -759,7 +837,8 @@
 
         fetch(API_BASE + '/stream/heartbeat?id=' + encode(params.id)
             + (params.season ? '&season=' + encode(params.season) : '')
-            + (params.episode ? '&episode=' + encode(params.episode) : ''),
+            + (params.episode ? '&episode=' + encode(params.episode) : '')
+            + (TV_MODE ? '&session=' + encode(SESSION) : ''),
         { method: 'POST', headers: { Accept: 'application/json' } })
             .then(function (r) {
                 if (r.status === 404 || r.status === 405) stopHeartbeat();
@@ -788,8 +867,10 @@
             id: clean(next.id || p.id),
             season: clean(next.season !== undefined ? next.season : p.season),
             episode: clean(next.episode !== undefined ? next.episode : p.episode),
-            title: clean(next.title !== undefined ? next.title : p.title) || ''
+            title: clean(next.title !== undefined ? next.title : p.title) || '',
+            episodeTitle: clean(next.episodeTitle !== undefined ? next.episodeTitle : p.episodeTitle) || ''
         };
+        pendingResume = Number(clean(next.resume)) > 0 ? Number(clean(next.resume)) : 0;
 
         stopPolling();
         stopHeartbeat();
@@ -851,6 +932,7 @@
     function stop() {
         stopPolling();
         stopHeartbeat();
+        cancelBufferOverlay();
         el.video.pause();
         el.video.removeAttribute('src');
         el.video.load();
@@ -858,6 +940,380 @@
         state = 'idle';
         setDownloadButton('idle');
         resetControlsUI();
+    }
+
+    /* ------------------------------------------------------------------ *
+     * TV skin (player.html?tvui=1)
+     * ------------------------------------------------------------------ */
+
+    var TV_ARROWS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
+    var TV_ARROW_CODES = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
+
+    /** Remote keys that should leave the player (TV back / Escape). */
+    function isBackKey(event) {
+        var key = String(event.key || '');
+        if (key === 'Escape' || key === 'Backspace' || key === 'BrowserBack' || key === 'GoBack') return true;
+        return [8, 27, 461, 10009].indexOf(event.keyCode) !== -1;
+    }
+
+    function tvRows() {
+        // Three visual rows: options on top, then the progress line, then the
+        // action pills. Keeping the scrubber on its own row makes left/right
+        // seek while focused, and Up/Down still reaches every other control.
+        return [
+            [el.tvBack, el.tvRewind, el.tvForward, el.tvNext],
+            [el.tvPlay, el.tvSeek],
+            [el.tvSubs, el.tvOptions, el.tvFull]
+        ].map(function (row) {
+            return row.filter(Boolean);
+        }).filter(function (row) { return row.length; });
+    }
+
+    function focusTv(target) {
+        if (!target) return;
+        try { target.focus(); } catch (e) { /* not focusable yet */ }
+        pokeBars();
+    }
+
+    /** Arrow keys move focus: left/right inside a row, up/down between rows. */
+    function moveTvFocus(direction) {
+        var rows = tvRows();
+        if (!rows.length) return;
+
+        var active = document.activeElement;
+        var rowIndex = -1;
+        var colIndex = -1;
+        rows.forEach(function (row, r) {
+            var c = row.indexOf(active);
+            if (c !== -1 && rowIndex === -1) { rowIndex = r; colIndex = c; }
+        });
+
+        if (rowIndex === -1) {
+            focusTv(rows[rows.length - 1][0]);
+            return;
+        }
+
+        if (direction === 'left' || direction === 'right') {
+            var row = rows[rowIndex];
+            var step = direction === 'right' ? 1 : -1;
+            focusTv(row[(colIndex + step + row.length) % row.length]);
+            return;
+        }
+
+        var nextRow = rows[(rowIndex + (direction === 'down' ? 1 : rows.length - 1)) % rows.length];
+        focusTv(nextRow[Math.min(colIndex, nextRow.length - 1)]);
+    }
+
+    /** Inside the TV watch page this asks the parent to navigate back. */
+    function tvGoBack() {
+        try {
+            if (isEmbedded() && window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'wl:back' }, location.origin);
+                return;
+            }
+        } catch (e) { /* cross-origin parent */ }
+        if (window.history.length > 1) window.history.back();
+        else window.location.href = '/tvui/home';
+    }
+
+    /** Reference layout: elapsed on the left, time left on the right. */
+    function setTvTimes(current, duration) {
+        if (el.tvCurrent) el.tvCurrent.textContent = formatClock(current || 0);
+        if (el.tvRemaining) {
+            el.tvRemaining.textContent = (isFinite(duration) && duration > 0)
+                ? formatClock(Math.max(0, duration - (current || 0)))
+                : '--:--';
+        }
+    }
+
+    function setTvSubtitleLabel() {
+        if (!el.tvSubs) return;
+        var on = subtitleIndex >= 0 && subtitleTracks[subtitleIndex];
+        el.tvSubs.textContent = on
+            ? 'Subtitles: ' + subtitleLabel(subtitleTracks[subtitleIndex], subtitleIndex)
+            : 'Subtitles: Off';
+        el.tvSubs.classList.toggle('is-active', !!on);
+    }
+
+    function setTvSourceLabel(text, active) {
+        if (!el.tvSource) return;
+        el.tvSource.textContent = text;
+        el.tvSource.classList.toggle('is-active', !!active);
+    }
+
+    /* ---- options sheet: pick which torrent ("server") plays ---- */
+
+    var tvSheetOpen = false;
+
+    function tvSheetButtons() {
+        if (!el.tvSheet) return [];
+        return Array.prototype.slice.call(el.tvSheet.querySelectorAll('button'));
+    }
+
+    function setServerListMessage(text) {
+        if (!el.tvSourceList) return;
+        el.tvSourceList.innerHTML = '';
+        var note = document.createElement('p');
+        note.className = 'wl-sheet-hint';
+        note.textContent = text;
+        el.tvSourceList.appendChild(note);
+    }
+
+    function renderServerList(count, index) {
+        if (!el.tvSourceList) return;
+        el.tvSourceList.innerHTML = '';
+
+        if (count < 1) {
+            setServerListMessage('No servers were found for this title.');
+            return;
+        }
+
+        for (var number = 1; number <= count; number++) {
+            (function (value) {
+                var button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'wl-sheet-server' + (value === index ? ' is-active' : '');
+                button.textContent = (value === index ? '\u2713 ' : '') + 'Server ' + value;
+                button.addEventListener('click', function () { switchSource(value); });
+                el.tvSourceList.appendChild(button);
+            }(number));
+        }
+
+        setTvSourceLabel('Server ' + index + (count > 1 ? ' of ' + count : ''), true);
+
+        // The list arrives after the sheet opens; put the remote on the server
+        // that is playing, now that there is something to land on.
+        var activeButton = el.tvSourceList.querySelector('.is-active');
+        if (tvSheetOpen && activeButton) focusTv(activeButton);
+    }
+
+    function loadServerList() {
+        if (!el.tvSourceList) return;
+        setServerListMessage('Finding servers\u2026');
+
+        var query = new URLSearchParams({
+            id: params.id || '',
+            season: params.season || '',
+            episode: params.episode || '',
+            session: SESSION
+        });
+
+        fetch(API_BASE + '/stream/sources?' + query.toString(), { headers: { Accept: 'application/json' } })
+            .then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(function (data) {
+                renderServerList(Number(data.count) || 0, Number(data.index) || 1);
+            })
+            .catch(function () {
+                renderServerSteps();
+            });
+    }
+
+    /**
+     * Fallback when the server cannot list the magnet count (older backend):
+     * offer Next/Previous, which use the switch endpoint that always exists.
+     */
+    function renderServerSteps() {
+        if (!el.tvSourceList) return;
+        el.tvSourceList.innerHTML = '';
+        [['\u25C0 Previous server', 'prev'], ['Next server \u25B6', 'next']].forEach(function (pair) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'wl-sheet-server';
+            button.textContent = pair[0];
+            button.addEventListener('click', function () { switchSource(null, pair[1]); });
+            el.tvSourceList.appendChild(button);
+        });
+    }
+
+    function openTvSheet() {
+        if (!el.tvSheet || tvSheetOpen) return;
+        tvSheetOpen = true;
+        el.tvSheet.hidden = false;
+        pokeBars();
+        loadServerList();
+
+        var active = el.tvSourceList && el.tvSourceList.querySelector('.is-active');
+        var buttons = tvSheetButtons();
+        focusTv(active || buttons[0] || el.tvSheetClose);
+    }
+
+    function closeTvSheet() {
+        if (!tvSheetOpen) return;
+        tvSheetOpen = false;
+        if (el.tvSheet) el.tvSheet.hidden = true;
+        focusTv(el.tvOptions);
+    }
+
+    /**
+     * Play this title from another torrent. Without an explicit server number
+     * it asks for the next one. The backend drops the previous torrent once
+     * nobody streams it any more, so switching does not pile up downloads.
+     */
+    function switchSource(target, direction) {
+        if (!params.id) {
+            showToast('Nothing is playing yet');
+            return;
+        }
+        if (switchingServer) return;
+
+        var explicit = typeof target === 'number' && isFinite(target) && target >= 1;
+        switchingServer = true;
+        var previousLabel = el.tvSource ? el.tvSource.textContent : 'Server 1';
+        setTvSourceLabel(explicit ? 'Switching to server ' + Math.floor(target) + '\u2026' : 'Switching\u2026', true);
+
+        var resumeAt = (state === 'ready' && el.video) ? (el.video.currentTime || 0) : 0;
+        var payload = {
+            id: params.id,
+            season: params.season,
+            episode: params.episode,
+            session: SESSION
+        };
+        if (explicit) payload.index = Math.floor(target);
+        else payload.direction = direction === 'prev' ? 'prev' : 'next';
+
+        fetch(API_BASE + '/stream/source', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(function (data) {
+                switchingServer = false;
+                var index = data.index || 1;
+                setTvSourceLabel('Server ' + index + (data.total > 1 ? ' of ' + data.total : ''), true);
+                if (!data.changed) {
+                    showToast(data.total > 1 ? 'That server is already playing' : 'Only one source was found');
+                    return;
+                }
+                closeTvSheet();
+                showToast('Server ' + index + (data.total > 1 ? ' of ' + data.total : ''));
+                load({
+                    id: params.id,
+                    season: params.season,
+                    episode: params.episode,
+                    title: params.title,
+                    episodeTitle: params.episodeTitle,
+                    resume: resumeAt >= 3 ? String(Math.floor(resumeAt)) : ''
+                });
+            })
+            .catch(function () {
+                switchingServer = false;
+                setTvSourceLabel(previousLabel, false);
+                showToast('Could not switch server');
+            });
+    }
+
+    function onTvKey(event) {
+        if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+
+        var target = event.target;
+        var tag = (target && target.tagName || '').toLowerCase();
+        var inField = tag === 'input' || tag === 'textarea' || tag === 'select';
+        var direction = TV_ARROWS[event.key] || TV_ARROW_CODES[event.keyCode];
+
+        // While the options sheet is open it owns the remote: arrows walk its
+        // buttons, back closes it, and nothing leaks to the player underneath.
+        if (tvSheetOpen) {
+            var buttons = tvSheetButtons();
+            if (direction && buttons.length) {
+                event.preventDefault();
+                var active = buttons.indexOf(document.activeElement);
+                var step = (direction === 'left' || direction === 'up') ? -1 : 1;
+                var next = active === -1 ? 0 : (active + step + buttons.length) % buttons.length;
+                focusTv(buttons[next]);
+                return;
+            }
+            if (isBackKey(event)) {
+                event.preventDefault();
+                closeTvSheet();
+            }
+            return;
+        }
+
+        // The scrubber keeps its own left/right/enter (native range input).
+        if (inField && direction && direction !== 'up' && direction !== 'down') {
+            pokeBars();
+            return;
+        }
+        if (inField && (event.key === 'Enter' || event.key === ' ')) return;
+
+        if (direction) {
+            event.preventDefault();
+            moveTvFocus(direction);
+            pokeBars();
+            return;
+        }
+
+        if (event.key === 'Enter' || event.key === ' ') {
+            // A focused button activates itself on Enter/space.
+            if (tag === 'button') { pokeBars(); return; }
+            event.preventDefault();
+            togglePlay();
+            return;
+        }
+
+        if (event.key === 'MediaPlayPause' || event.key === 'MediaPlay') {
+            event.preventDefault();
+            togglePlay();
+            return;
+        }
+
+        if (isBackKey(event)) {
+            event.preventDefault();
+            tvGoBack();
+        }
+    }
+
+    function initTvUi() {
+        if (!TV_MODE || !el.tvui || !el.player) return;
+
+        el.player.classList.add('is-tv');
+        el.tvui.hidden = false;
+
+        if (el.tvBack) el.tvBack.addEventListener('click', tvGoBack);
+        if (el.tvRewind) el.tvRewind.addEventListener('click', function () { seekBy(-10); });
+        if (el.tvForward) el.tvForward.addEventListener('click', function () { seekBy(10); });
+        if (el.tvNext) el.tvNext.addEventListener('click', function () {
+            if (el.next) el.next.click();
+        });
+        if (el.tvPlay) el.tvPlay.addEventListener('click', togglePlay);
+        if (el.tvFull) el.tvFull.addEventListener('click', toggleFullscreen);
+        if (el.tvSubs) el.tvSubs.addEventListener('click', cycleSubtitles);
+        if (el.tvOptions) el.tvOptions.addEventListener('click', openTvSheet);
+        if (el.tvSheetClose) el.tvSheetClose.addEventListener('click', closeTvSheet);
+
+        if (el.tvSeek) {
+            el.tvSeek.addEventListener('pointerdown', function () { isScrubbing = true; });
+            el.tvSeek.addEventListener('input', function () {
+                isScrubbing = true;
+                if (!el.video || state !== 'ready') return;
+                var duration = el.video.duration;
+                if (!isFinite(duration) || duration <= 0) return;
+                var target = (Number(el.tvSeek.value) / SEEK_MAX) * duration;
+                try { el.video.currentTime = target; } catch (e) { /* not seekable */ }
+                el.tvSeek.style.setProperty('--fill', (Number(el.tvSeek.value) / 10).toFixed(2) + '%');
+                setTvTimes(target, duration);
+            });
+            ['change', 'pointerup'].forEach(function (name) {
+                el.tvSeek.addEventListener(name, function () {
+                    isScrubbing = false;
+                    updateSeekUI();
+                    pokeBars();
+                    if (el.video && state === 'ready' && el.video.readyState < 3) scheduleBufferOverlay();
+                });
+            });
+        }
+
+        setTvSubtitleLabel();
+        setTvSourceLabel('Server 1', false);
+        document.addEventListener('keydown', onTvKey, true);
+        window.setTimeout(function () { focusTv(el.tvPlay); }, 500);
     }
 
     /* ------------------------------------------------------------------ *
@@ -883,8 +1339,11 @@
     });
 
     // Buffering spinner, only while the video itself is waiting on data.
-    el.video.addEventListener('waiting', function () {
-        if (state !== 'ready' || el.video.readyState >= 3) return;
+    // It waits a moment before appearing and stays quiet while the viewer is
+    // still dragging the scrubber - seeking is not a stall, and flashing
+    // "Buffering" on every nudge only makes the seek feel broken.
+    function showBufferOverlay() {
+        if (state !== 'ready' || !el.video || el.video.readyState >= 3) return;
 
         var duration = el.video.duration;
         var buffered = el.video.buffered.length
@@ -898,10 +1357,36 @@
             stage: 'Buffering',
             percent: buffered
         });
+    }
+
+    function cancelBufferOverlay() {
+        clearTimeout(bufferOverlayTimer);
+        bufferOverlayTimer = null;
+    }
+
+    function scheduleBufferOverlay() {
+        cancelBufferOverlay();
+        bufferOverlayTimer = setTimeout(function () {
+            bufferOverlayTimer = null;
+            if (isScrubbing || tvSheetOpen) return;
+            showBufferOverlay();
+        }, 700);
+    }
+
+    el.video.addEventListener('waiting', function () {
+        if (state !== 'ready' || el.video.readyState >= 3) return;
+        if (isScrubbing) {
+            cancelBufferOverlay();
+            return;
+        }
+        scheduleBufferOverlay();
     });
     ['playing', 'canplay', 'seeked', 'timeupdate'].forEach(function (name) {
         el.video.addEventListener(name, function () {
-            if (state === 'ready' && el.video.readyState >= 3) hideOverlay();
+            cancelBufferOverlay();
+            // Only close the overlay when it is actually showing; poking the
+            // bars on every timeupdate would stop them auto-hiding.
+            if (state === 'ready' && el.video.readyState >= 3 && el.overlay && !el.overlay.hidden) hideOverlay();
         });
     });
 
@@ -954,6 +1439,7 @@
                 isScrubbing = false;
                 updateSeekUI();
                 pokeBars();
+                if (state === 'ready' && el.video && el.video.readyState < 3) scheduleBufferOverlay();
             });
         });
     }
@@ -996,6 +1482,7 @@
         }
     }
     document.addEventListener('keydown', function (e) {
+        if (TV_MODE) return; // the TV remote handler owns arrows/enter
         var tag = (e.target && e.target.tagName) || '';
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
         if (state !== 'ready') return;
@@ -1043,6 +1530,7 @@
         if (el.controls) el.controls.classList.add('is-embedded');
     }
 
+    initTvUi();
     updatePlayIcon();
     updateVolumeUI();
     updateSeekUI();

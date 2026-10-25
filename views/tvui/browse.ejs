@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<%- include('partials/head', { pageTitle: pageTitle }) %>
+
+<body class="tv-body" data-tv-page="browse" data-tv-mode="<%= mode %>" data-tv-back="/tvui/">
+    <%- include('partials/nav', { active: active }) %>
+
+    <main class="tv-main">
+        <section class="tv-hero">
+            <div class="tv-hero-media">
+                <img id="hero-img" alt="">
+            </div>
+            <div class="tv-hero-fade"></div>
+
+            <div class="tv-hero-content">
+                <p class="tv-hero-kicker" id="hero-kicker">WatchLaro</p>
+                <h1 class="tv-hero-title" id="hero-title">&nbsp;</h1>
+                <div class="tv-hero-meta" id="hero-meta"></div>
+                <p class="tv-hero-overview" id="hero-overview"></p>
+
+                <div class="tv-hero-actions" data-tv-row>
+                    <button type="button" class="tv-btn tv-btn-primary" id="hero-play" data-tv-item>
+                        <i class="fa-solid fa-play" aria-hidden="true"></i> Play
+                    </button>
+                    <button type="button" class="tv-btn tv-btn-ghost" id="hero-info" data-tv-item>
+                        <i class="fa-solid fa-circle-info" aria-hidden="true"></i> More Info
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="tv-rows" id="rows" aria-label="Catalogue"></section>
+    </main>
+
+    <script src="/tvui.js"></script>
+</body>
+
+</html>

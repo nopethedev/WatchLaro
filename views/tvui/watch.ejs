@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<%- include('partials/head', { pageTitle: pageTitle }) %>
+
+<body class="tv-body tv-watch" data-tv-page="watch" data-tv-back="<%= back %>">
+    <iframe id="tv-player" src="<%= embed %>" allow="autoplay; fullscreen; encrypted-media" allowfullscreen
+        tabindex="0" title="<%= pageTitle %>"></iframe>
+
+    <script>
+        // Remote keys must land inside the player, so the iframe owns focus.
+        var frame = document.getElementById("tv-player");
+        function focusPlayer() {
+            try { frame.focus(); } catch (err) { /* not focusable yet */ }
+        }
+        frame.addEventListener("load", focusPlayer);
+        window.addEventListener("load", focusPlayer);
+
+        // The player iframe asks this page to navigate back (remote back key).
+        window.addEventListener("message", function (event) {
+            if (event.origin !== location.origin) return;
+            var data = event.data;
+            if (!data || data.type !== "wl:back") return;
+            window.location.href = document.body.getAttribute("data-tv-back") || "/tvui/home";
+        });
+    </script>
+    <script src="/tvui.js"></script>
+</body>
+
+</html>

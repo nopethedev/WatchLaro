@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<%- include('partials/head', { pageTitle: pageTitle }) %>
+
+<body class="tv-body tv-search-page" data-tv-page="search" data-tv-nav="spatial" data-tv-back="/tvui/home">
+    <%- include('partials/nav', { active: active }) %>
+
+    <main class="tv-search-layout">
+        <aside class="tv-search-rail" aria-label="Search keyboard">
+            <p class="tv-search-query" id="tv-search-query" hidden></p>
+
+            <a class="tv-key tv-key-back" href="/tvui/home" data-tv-item>
+                <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to Browse
+            </a>
+
+            <div class="tv-keyboard" id="tv-keyboard" role="group" aria-label="On-screen keyboard"></div>
+
+            <h2 class="tv-search-rail-title">Popular searches</h2>
+            <div class="tv-suggestions" id="tv-suggestions"></div>
+        </aside>
+
+        <section class="tv-search-results" aria-label="Search results">
+            <label class="tv-query">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input id="tv-search-input" type="search" data-tv-item autocomplete="off" spellcheck="false"
+                    placeholder="Search movies and shows" aria-label="Search movies and shows">
+            </label>
+
+            <p class="tv-status" id="tv-search-status" aria-live="polite"></p>
+
+            <div class="tv-result-grid" id="search-grid"></div>
+        </section>
+    </main>
+
+    <script src="/tvui.js"></script>
+</body>
+
+</html>

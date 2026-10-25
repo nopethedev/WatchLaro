@@ -9,13 +9,87 @@ const router = express.Router();
 
 /** tmdb id (+season/episode) -> magnet, so progress polls don't re-search. */
 const magnetCache = new NodeCache({ stdTTL: 3600, checkPeriod: 600 });
+/** Same key -> every magnet found, best first. The player's server switcher cycles this list. */
+const candidateCache = new NodeCache({ stdTTL: 3600, checkPeriod: 600 });
 
 const keyFor = (id, season, episode) =>
     season && episode ? `tv:${id}:${season}:${episode}` : `movie:${id}`;
 
+/** How many alternative torrents a title keeps for the server switcher. */
+const MAX_CANDIDATES = 10;
+
 /** One-line request target for logs, e.g. `id=123 season=1 episode=2`. */
 const describeTarget = (id, season, episode) =>
     season && episode ? `id=${id} season=${season} episode=${episode}` : `id=${id}`;
+
+/**
+ * All magnets for a title, best first (seeders where the provider ranks).
+ * Queries are tried in order and results deduped by info hash, so this is
+ * both the resolution path and the server-switcher candidate pool.
+ */
+async function resolveCandidates(id, season, episode) {
+    const key = keyFor(id, season, episode);
+    const cached = candidateCache.get(key);
+    if (cached) return cached;
+
+    const isSeries = Boolean(season && episode);
+    let queries;
+    try {
+        queries = isSeries
+            ? await tmdb.buildTVQueries(String(id), String(season), String(episode))
+            : await tmdb.buildMovieQueries(String(id));
+    } catch (err) {
+        console.log(`[stream] could not build queries for ${key}: ${err.message}`);
+        return [];
+    }
+
+    queries = (queries || []).filter((query) => query && !query.includes('undefined'));
+    if (!queries.length) {
+        console.log(`[stream] no TMDB query for ${key}`);
+        return [];
+    }
+    console.log(`[search] trying ${queries.length} queries for ${key}: ${queries.join(' | ')}`);
+
+    const seen = new Set();
+    const magnets = [];
+
+    for (const query of queries) {
+        console.log(`[search] TMDB query: "${query}" (${key})`);
+        let results = [];
+        try {
+            results = await downloader.search(query, isSeries ? { limit: 20, sort: 'seeders' } : { limit: 20 });
+        } catch (err) {
+            console.log(`[search] "${query}" failed: ${err.message}`);
+            continue;
+        }
+
+        for (const result of results || []) {
+            const magnet = result?.magnet;
+            if (!magnet) continue;
+            const hash = /btih:([a-z0-9]+)/i.exec(String(magnet));
+            const identity = hash ? hash[1].toLowerCase() : String(magnet);
+            if (seen.has(identity)) continue;
+            seen.add(identity);
+            magnets.push(magnet);
+            if (magnets.length >= MAX_CANDIDATES) break;
+        }
+
+        if (magnets.length > 0 && queries.indexOf(query) === 0) {
+            console.log(`[stream] ${magnets.length} candidate(s) via "${query}" for ${key}`);
+        }
+        if (magnets.length >= MAX_CANDIDATES) break;
+    }
+
+    if (!magnets.length) {
+        console.log(`[stream] no magnet found for ${key} after ${queries.length} queries`);
+        return [];
+    }
+
+    candidateCache.set(key, magnets);
+    magnetCache.set(key, magnets[0]);
+    console.log(`[stream] resolved ${magnets.length} source(s) for ${key}`);
+    return magnets;
+}
 
 async function resolveMagnet(id, season, episode) {
     const key = keyFor(id, season, episode);
@@ -24,29 +98,68 @@ async function resolveMagnet(id, season, episode) {
         console.log(`[stream] magnet cache hit for ${key}`);
         return cached;
     }
+    const magnets = await resolveCandidates(id, season, episode);
+    return magnets[0] || null;
+}
 
-    let query;
-    if (season && episode) {
-        query = await tmdb.buildTVQuery(String(id), String(season), String(episode));
-    } else {
-        query = await tmdb.buildMovieQuery(String(id));
-    }
-    if (!query || query.includes('undefined')) {
-        console.log(`[stream] no TMDB query for ${key}`);
-        return null;
-    }
-    const isSeries = Boolean(season && episode);
-    console.log(`[search] TMDB query: "${query}" (${key})`);
+/* ------------------------------------------------------------------ *
+ * server switcher (one entry per player session)
+ * ------------------------------------------------------------------ */
 
-    const results = await downloader.search(query, isSeries ? { limit: 20, sort: 'seeders' } : { limit: 20 });
-    const magnet = results?.[0]?.magnet ?? null;
-    if (magnet) {
-        magnetCache.set(key, magnet);
-        console.log(`[stream] magnet resolved ${String(magnet).slice(0, 30)}... for ${key}`);
-    } else {
-        console.log(`[stream] no magnet found for ${key} (query: "${query}")`);
+/** player session id -> { key, index, magnet, updatedAt } */
+const sourceSessions = new Map();
+const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
+
+const sessionSweeper = setInterval(() => {
+    const cutoff = Date.now() - SESSION_TTL_MS;
+    for (const [id, entry] of sourceSessions) {
+        if (!entry.updatedAt || entry.updatedAt < cutoff) sourceSessions.delete(id);
     }
-    return magnet;
+}, 30 * 60_000);
+if (typeof sessionSweeper.unref === 'function') sessionSweeper.unref();
+
+/** Session ids are client generated; keep them short and boring. */
+function sanitizeSession(value) {
+    const id = String(value ?? '').trim();
+    return /^[a-z0-9-]{6,64}$/i.test(id) ? id : null;
+}
+
+/** The magnet the player picked, only when it belongs to this title. */
+function sessionMagnet(id, season, episode, sessionId) {
+    const entry = sessionId ? sourceSessions.get(sessionId) : null;
+    if (!entry) return null;
+    if (entry.key !== keyFor(id, season, episode)) return null;
+    return entry.magnet || null;
+}
+
+/** Chosen server first, otherwise the best search result. */
+async function magnetFor(id, season, episode, sessionId) {
+    return sessionMagnet(id, season, episode, sessionId)
+        || resolveMagnet(id, season, episode);
+}
+
+/**
+ * Drop a magnet's job once its last viewer has gone. Retries for a minute so
+ * the old stream has time to actually close after a switch.
+ */
+function scheduleRelease(magnet) {
+    if (!magnet) return;
+    let attempt = 0;
+    const tryRelease = async () => {
+        attempt += 1;
+        let released = false;
+        try {
+            released = await downloader.releaseIfUnwatched(magnet);
+        } catch (err) {
+            console.log(`[stream] release failed: ${err.message}`);
+        }
+        if (!released && attempt < 7) {
+            const timer = setTimeout(tryRelease, 10_000);
+            if (typeof timer.unref === 'function') timer.unref();
+        }
+    };
+    const first = setTimeout(tryRelease, 5_000);
+    if (typeof first.unref === 'function') first.unref();
 }
 
 /** Serve a finished transcode (downloads/<outputFile>) with range support. */
@@ -101,9 +214,10 @@ function serveFinishedFile(req, res, outputFile) {
 async function handleStream(req, res) {
     const { id, season, episode } = req.params;
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
+    const session = sanitizeSession(req.query.session);
     console.log(`[stream] incoming stream request ${describeTarget(id, season, episode)}`);
     try {
-        const magnet = await resolveMagnet(id, season, episode);
+        const magnet = await magnetFor(id, season, episode, session);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
 
         // Series path finishes into a browser-ready mp4 - prefer it when done.
@@ -124,10 +238,11 @@ async function handleStream(req, res) {
 async function handleSubs(req, res) {
     const { id, season, episode } = req.params;
     const lang = String(req.query.lang || '').toLowerCase().trim();
+    const session = sanitizeSession(req.query.session);
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
     console.log(`[stream] incoming subs request ${describeTarget(id, season, episode)}${lang ? ` lang=${lang}` : ''}`);
     try {
-        const magnet = await resolveMagnet(String(id), season, episode);
+        const magnet = await magnetFor(String(id), season, episode, session);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
 
         const prog = downloader.getProgress(magnet);
@@ -167,9 +282,10 @@ async function handleSubs(req, res) {
 async function handleDownload(req, res) {
     const { id, season, episode } = req.params;
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
+    const session = sanitizeSession(req.query.session);
     console.log(`[stream] incoming download request ${describeTarget(id, season, episode)}`);
     try {
-        const magnet = await resolveMagnet(id, season, episode);
+        const magnet = await magnetFor(id, season, episode, session);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
 
         const existing = downloader.getProgress(magnet);
@@ -187,14 +303,101 @@ async function handleDownload(req, res) {
     }
 }
 
+// POST /api/stream/source - pick the next (or previous) magnet for this player
+// and drop the previous one once nobody is watching it any more.
+router.post('/api/stream/source', async (req, res) => {
+    const body = req.body || {};
+    const id = String(body.id ?? '').trim();
+    const season = String(body.season ?? '').trim();
+    const episode = String(body.episode ?? '').trim();
+    const session = sanitizeSession(body.session);
+    const step = body.direction === 'prev' ? -1 : 1;
+
+    if (!/^\d+$/.test(id)) return res.status(400).json({ error: 'invalid id' });
+    if (!session) return res.status(400).json({ error: 'invalid session' });
+    if ((season || episode) && !(/^\d+$/.test(season) && /^\d+$/.test(episode))) {
+        return res.status(400).json({ error: 'invalid episode' });
+    }
+
+    const key = keyFor(id, season, episode);
+    console.log(`[stream] source switch (${step > 0 ? 'next' : 'prev'}) for ${describeTarget(id, season, episode)}`);
+
+    try {
+        const magnets = await resolveCandidates(id, season, episode);
+        if (!magnets.length) return res.status(404).json({ error: 'no torrent found' });
+
+        const current = sourceSessions.get(session);
+        const sameTitle = Boolean(current && current.key === key);
+        const startIndex = sameTitle ? current.index : 0;
+        // The options menu picks a server by number; without one, step to the
+        // next (or previous) magnet.
+        const requested = Number(body.index);
+        const picked = Number.isInteger(requested) && requested >= 1 && requested <= magnets.length
+            ? requested - 1
+            : null;
+        const index = picked !== null
+            ? picked
+            : (startIndex + step + magnets.length) % magnets.length;
+        // Without a session entry the player is on the default (best) magnet,
+        // so that is the one to release after moving away from it.
+        const previous = sameTitle ? current.magnet : magnets[0];
+        const magnet = magnets[index];
+
+        sourceSessions.set(session, { key, index, magnet, updatedAt: Date.now() });
+
+        // The old torrent is no longer the one being streamed. Clean it up
+        // only when its last viewer has disconnected (checked with retries).
+        if (previous && previous !== magnet) scheduleRelease(previous);
+
+        console.log(`[stream] source ${index + 1}/${magnets.length} for ${describeTarget(id, season, episode)}`);
+        return res.json({
+            ok: true,
+            index: index + 1,
+            total: magnets.length,
+            changed: previous !== magnet,
+        });
+    } catch (err) {
+        console.error('[stream/source]', err.message);
+        return res.status(500).json({ error: 'could not switch source' });
+    }
+});
+
+// GET /api/stream/sources - how many magnets this title has, and which one
+// this player session is playing (1-based). Powers the player's options menu.
+router.get('/api/stream/sources', async (req, res) => {
+    const id = String(req.query.id ?? '').trim();
+    const season = String(req.query.season ?? '').trim();
+    const episode = String(req.query.episode ?? '').trim();
+    const session = sanitizeSession(req.query.session);
+
+    if (!/^\d+$/.test(id)) return res.status(400).json({ error: 'invalid id' });
+    if ((season || episode) && !(/^\d+$/.test(season) && /^\d+$/.test(episode))) {
+        return res.status(400).json({ error: 'invalid episode' });
+    }
+
+    try {
+        const magnets = await resolveCandidates(id, season, episode);
+        if (!magnets.length) return res.status(404).json({ error: 'no torrent found' });
+
+        const key = keyFor(id, season, episode);
+        const current = session ? sourceSessions.get(session) : null;
+        const playing = current && current.key === key ? current.index : 0;
+        return res.json({ count: magnets.length, index: playing + 1 });
+    } catch (err) {
+        console.error('[stream/sources]', err.message);
+        return res.status(500).json({ error: 'could not list sources' });
+    }
+});
+
 // Specific paths first: Express matches in order, so /progress must come
 // before /:id or "progress" gets swallowed as an id.
 router.get('/api/stream/progress', async (req, res) => {
     const { id, season, episode } = req.query;
+    const session = sanitizeSession(req.query.session);
     console.log(`[stream] incoming progress request ${describeTarget(id, season, episode)}`);
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
     try {
-        const magnet = await resolveMagnet(String(id), season, episode);
+        const magnet = await magnetFor(String(id), season, episode, session);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
         res.json(downloader.getProgress(magnet));
     } catch (err) {
@@ -221,13 +424,15 @@ router.get('/api/stream/download/:id/:season/:episode', handleDownload);
 // Optional heartbeat - keeps the torrent alive during long watches (?heartbeat=1).
 // Successful pings are silent (one per viewer per minute is spam); only
 // failures are logged.
-router.post('/api/stream/heartbeat', (req, res) => {
+router.post('/api/stream/heartbeat', async (req, res) => {
     const { id, season, episode } = req.query;
+    const session = sanitizeSession(req.query.session);
     if (!id) {
         console.log('[heartbeat] rejected: missing id');
         return res.status(400).json({ ok: false, status: 'idle' });
     }
-    const magnet = magnetCache.get(keyFor(String(id), season, episode));
+    const magnet = sessionMagnet(String(id), season, episode, session)
+        || magnetCache.get(keyFor(String(id), season, episode));
     if (!magnet) {
         console.log(`[heartbeat] unknown magnet for ${describeTarget(id, season, episode)}`);
         return res.status(404).json({ ok: false, status: 'idle' });

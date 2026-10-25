@@ -1,0 +1,1074 @@
+/* ==========================================================================
+   WatchLaro TV UI
+   10-foot interface for televisions: big type, dark Netflix-style layout,
+   and a strong white focus state that reads from across the room.
+   Navigation is driven by /tvui.js (remote arrows + enter/click).
+   ========================================================================== */
+
+:root {
+    --tv-bg: #0a0a0f;
+    --tv-panel: #16161d;
+    --tv-text: #f6f6f9;
+    --tv-muted: #9c9caa;
+    --tv-accent: #3b82f6;
+    --tv-accent-strong: #2563eb;
+    --tv-pad: 4.5rem;
+    --tv-nav-h: 5.5rem;
+    --tv-radius: .45rem;
+    --tv-card-w: 12.2rem;
+    --tv-card-h: 18.3rem;
+    --tv-expanded-w: 32.5rem;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    font-size: clamp(15px, 1vw, 21px);
+    scrollbar-width: none;
+    -webkit-text-size-adjust: 100%;
+}
+
+html::-webkit-scrollbar {
+    display: none;
+}
+
+body.tv-body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--tv-bg);
+    color: var(--tv-text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.4;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    animation: tv-fade-in .35s ease both;
+}
+
+body.tv-body img {
+    display: block;
+    max-width: 100%;
+}
+
+@keyframes tv-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ==========================================================================
+   Top navigation
+   ========================================================================== */
+
+.tv-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 2.6rem;
+    height: var(--tv-nav-h);
+    padding: 0 var(--tv-pad);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, .55) 55%, transparent 100%);
+}
+
+.tv-logo {
+    font-size: 1.65rem;
+    font-weight: 900;
+    letter-spacing: -.045em;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: baseline;
+}
+
+.tv-logo-watch { color: #fff; }
+.tv-logo-laro { color: var(--tv-accent); }
+
+.tv-nav-tabs {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+.tv-nav-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .55rem 1.1rem;
+    border: 2px solid transparent;
+    border-radius: .5rem;
+    color: #c6c6d2;
+    font-size: .98rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background .16s ease, color .16s ease, transform .16s ease;
+}
+
+.tv-nav-tab i {
+    font-size: .95em;
+    opacity: .85;
+}
+
+.tv-nav-tab.is-active {
+    color: #fff;
+    background: rgba(255, 255, 255, .1);
+}
+
+.tv-nav-tab:focus {
+    outline: none;
+    background: #fff;
+    color: #0a0a0f;
+    transform: scale(1.02);
+}
+
+.tv-nav-tab:focus i { opacity: 1; }
+
+.tv-nav-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 1.4rem;
+}
+
+.tv-nav-clock {
+    font-size: .9rem;
+    color: #8f8f9f;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .04em;
+}
+
+.tv-nav-profile {
+    display: inline-flex;
+    padding: .2rem;
+    border: 2px solid transparent;
+    border-radius: .55rem;
+    text-decoration: none;
+    transition: border-color .16s ease, transform .16s ease;
+}
+
+.tv-nav-profile:focus {
+    outline: none;
+    border-color: #fff;
+    transform: scale(1.06);
+}
+
+.tv-avatar {
+    width: 2.15rem;
+    height: 2.15rem;
+    display: grid;
+    place-items: center;
+    border-radius: .45rem;
+    background: linear-gradient(150deg, #35507e, #171a24);
+    color: #dbe7ff;
+    font-size: .95rem;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.tv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .82rem 1.85rem;
+    border: 2px solid transparent;
+    border-radius: var(--tv-radius);
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.tv-btn-primary {
+    background: #fff;
+    color: #000;
+}
+
+.tv-btn-ghost {
+    background: rgba(72, 72, 86, .68);
+    color: #fff;
+}
+
+.tv-btn:focus {
+    outline: 3px solid #fff;
+    outline-offset: 3px;
+    transform: scale(1.04);
+    box-shadow: 0 0 2.4rem rgba(255, 255, 255, .22);
+}
+
+.tv-btn-ghost:focus {
+    background: rgba(116, 116, 136, .85);
+}
+
+/* ==========================================================================
+   Hero billboard
+   ========================================================================== */
+
+.tv-hero {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    min-height: 82vh;
+    padding: calc(var(--tv-nav-h) + 2rem) var(--tv-pad) 5.5rem;
+    overflow: hidden;
+}
+
+.tv-hero-media,
+.tv-info-media {
+    position: absolute;
+    inset: 0;
+    background: #101018;
+}
+
+.tv-hero-media img,
+.tv-info-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 25%;
+}
+
+.tv-hero-fade,
+.tv-info-fade {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(to right, rgba(8, 8, 12, .97) 0%, rgba(8, 8, 12, .74) 36%, rgba(8, 8, 12, .12) 68%, rgba(8, 8, 12, .4) 100%),
+        linear-gradient(to top, var(--tv-bg) 1%, rgba(8, 8, 12, .55) 24%, transparent 58%),
+        linear-gradient(to bottom, rgba(8, 8, 12, .8), transparent 24%);
+}
+
+.tv-hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 40rem;
+}
+
+/* Muted preview trailer layered over the banner art. It fades in only once
+   the embed has loaded; if it cannot load the banner stays visible. */
+.tv-hero-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .7s ease;
+}
+
+.tv-hero-video.is-ready { opacity: 1; }
+
+.tv-hero-kicker {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    margin: 0 0 .9rem;
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: #d2d8e6;
+}
+
+.tv-hero-kicker::before {
+    content: "";
+    width: .22rem;
+    height: 1.1rem;
+    background: var(--tv-accent);
+    border-radius: 1px;
+}
+
+.tv-hero-title {
+    margin: 0 0 1rem;
+    font-size: clamp(2.8rem, 5vw, 4.6rem);
+    font-weight: 900;
+    line-height: .96;
+    letter-spacing: -.035em;
+    text-shadow: 0 .3rem 1.5rem rgba(0, 0, 0, .55);
+}
+
+.tv-hero-meta,
+.tv-info-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .45rem .95rem;
+    margin: 0 0 1.1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #d5d5df;
+}
+
+.tv-match {
+    color: #46d369;
+    font-weight: 700;
+}
+
+.tv-dot {
+    color: #7d7d90;
+}
+
+/* Keep focused items clear of the fixed top navigation when scrolling. */
+[data-tv-item] {
+    scroll-margin-block: calc(var(--tv-nav-h) + 1rem) 1rem;
+}
+
+.tv-chip {
+    padding: .1rem .42rem;
+    border: 1px solid rgba(255, 255, 255, .38);
+    border-radius: .18rem;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #e4e4ec;
+}
+
+.tv-hero-overview {
+    margin: 0;
+    max-width: 36rem;
+    font-size: 1.04rem;
+    line-height: 1.55;
+    color: #e4e4ec;
+    text-shadow: 0 .15rem .8rem rgba(0, 0, 0, .5);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tv-hero-actions,
+.tv-info-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .9rem;
+    margin-top: 1.7rem;
+}
+
+/* ==========================================================================
+   Rows and cards
+   ========================================================================== */
+
+.tv-main { min-height: 100vh; }
+
+.tv-rows {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    margin-top: -4rem;
+    padding-bottom: 4.5rem;
+}
+
+.tv-row-title {
+    margin: 0 0 .45rem;
+    padding: 0 var(--tv-pad);
+    font-size: clamp(1.1rem, 1.35vw, 1.5rem);
+    font-weight: 700;
+    letter-spacing: -.01em;
+    color: #ececf2;
+}
+
+.tv-row-track {
+    display: flex;
+    gap: .75rem;
+    padding: .55rem var(--tv-pad) .85rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+
+.tv-row-track::-webkit-scrollbar { display: none; }
+
+.tv-card {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    width: var(--tv-card-w);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: width .3s ease, transform .16s ease;
+}
+
+.tv-card-media {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: var(--tv-card-h);
+    overflow: hidden;
+    border-radius: .4rem;
+    background: #1b1b23;
+    box-shadow: 0 .4rem 1.1rem rgba(0, 0, 0, .45);
+}
+
+.tv-card-poster,
+.tv-card-backdrop {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: opacity .25s ease;
+}
+
+.tv-card-backdrop { opacity: 0; }
+
+/* Info overlay only exists on the expanded card. */
+.tv-card-info {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    display: none;
+    flex-direction: column;
+    gap: .25rem;
+    padding: 1.4rem 1.3rem 1.05rem;
+    background: linear-gradient(to top, rgba(0, 0, 0, .95) 8%, rgba(0, 0, 0, .55) 55%, transparent);
+    text-align: left;
+}
+
+.tv-card-info-kicker {
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: #cbd5e8;
+}
+
+.tv-card-info-title {
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -.02em;
+    color: #fff;
+}
+
+.tv-card-info-meta {
+    font-size: .8rem;
+    color: #d5d5df;
+}
+
+.tv-card-title {
+    display: block;
+    margin-top: .5rem;
+    font-size: .9rem;
+    font-weight: 600;
+    color: #bcbcc9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color .16s ease;
+}
+
+.tv-card:focus {
+    outline: none;
+    transform: scale(1.06);
+    z-index: 4;
+}
+
+.tv-card:focus .tv-card-media {
+    outline: 3px solid #fff;
+    outline-offset: 3px;
+}
+
+/* Focused card grows into the in-row billboard, keeping the poster row height. */
+.tv-card.is-expanded {
+    width: var(--tv-expanded-w);
+    transform: none;
+    z-index: 5;
+}
+
+.tv-card.is-expanded .tv-card-info { display: flex; }
+.tv-card.is-expanded .tv-card-title { display: none; }
+
+/* Swap to the backdrop only once it has actually loaded, so expanding a card
+   never flashes an empty black box. */
+.tv-card.is-expanded.has-backdrop .tv-card-poster { opacity: 0; }
+.tv-card.is-expanded.has-backdrop .tv-card-backdrop { opacity: 1; }
+
+/* Trailer preview sits under the text overlay, above the artwork. */
+.tv-card-media .tv-hero-video { z-index: 1; }
+
+/* Episode cards keep their own wide thumbnail (no media wrapper). */
+.tv-episode-card img {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: .4rem;
+    background: #1b1b23;
+    box-shadow: 0 .4rem 1.1rem rgba(0, 0, 0, .45);
+}
+
+.tv-episode-card:focus { transform: scale(1.04); }
+.tv-episode-card:focus img { outline: 3px solid #fff; outline-offset: 3px; }
+
+.tv-card:focus .tv-card-title { color: #fff; }
+
+/* Details under the row for the expanded card. */
+.tv-row-focus {
+    display: none;
+    max-width: 74rem;
+    padding: .85rem var(--tv-pad) .1rem;
+}
+
+.tv-row-focus.is-visible {
+    display: block;
+    animation: tv-fade-in .22s ease both;
+}
+
+.tv-row-focus-meta {
+    font-size: .95rem;
+    font-weight: 600;
+    color: #d6d6e1;
+}
+
+.tv-row-focus-overview {
+    margin: .45rem 0 0;
+    font-size: .95rem;
+    line-height: 1.5;
+    color: #b6b6c4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tv-row-focus-overview:empty { display: none; }
+
+.tv-empty,
+.tv-status {
+    padding: 0 var(--tv-pad);
+    margin: .4rem 0 0;
+    font-size: 1.05rem;
+    color: var(--tv-muted);
+}
+
+/* Loading placeholders while the catalogue arrives. */
+.tv-skeleton-row {
+    display: flex;
+    gap: .75rem;
+    padding: .55rem var(--tv-pad) .85rem;
+    overflow: hidden;
+}
+
+.tv-skeleton-card {
+    flex: 0 0 auto;
+    width: 12.2rem;
+    aspect-ratio: 2 / 3;
+    border-radius: .4rem;
+    background: linear-gradient(100deg, #15151c 30%, #20202a 50%, #15151c 70%);
+    background-size: 220% 100%;
+    animation: tv-shimmer 1.5s linear infinite;
+}
+
+@keyframes tv-shimmer {
+    to { background-position: -220% 0; }
+}
+
+/* ==========================================================================
+   Profile selector
+   ========================================================================== */
+
+.tv-profiles-bg {
+    position: fixed;
+    inset: 0;
+    background-color: #101018;
+    background-size: cover;
+    background-position: center 30%;
+    opacity: .55;
+}
+
+.tv-profiles-shade {
+    position: fixed;
+    inset: 0;
+    background:
+        radial-gradient(120% 90% at 50% 42%, rgba(10, 10, 15, .35), rgba(10, 10, 15, .96) 76%),
+        linear-gradient(to top, #0a0a0f 2%, transparent 55%);
+}
+
+.tv-profiles {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2.2rem;
+    min-height: 100vh;
+    padding: 5rem 2rem;
+    text-align: center;
+}
+
+.tv-profiles-logo {
+    font-size: 1.9rem;
+    font-weight: 900;
+    letter-spacing: -.045em;
+    text-decoration: none;
+    line-height: 1;
+}
+
+.tv-profiles-title {
+    margin: 0;
+    font-size: clamp(2rem, 3.4vw, 3rem);
+    font-weight: 800;
+    letter-spacing: -.02em;
+}
+
+.tv-profiles-row {
+    display: flex;
+    gap: 2.2rem;
+}
+
+.tv-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .95rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #b8b8c6;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.tv-profile-tile {
+    width: 11rem;
+    height: 11rem;
+    display: grid;
+    place-items: center;
+    border: 3px solid transparent;
+    border-radius: 1rem;
+    background: linear-gradient(150deg, #2b3d5c, #12141b);
+    color: #d3e3ff;
+    font-size: 3.4rem;
+    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.tv-profile-name {
+    font-size: 1.2rem;
+    font-weight: 600;
+    transition: color .16s ease;
+}
+
+.tv-profile:focus { outline: none; }
+
+.tv-profile:focus .tv-profile-tile {
+    border-color: #fff;
+    transform: scale(1.05);
+    box-shadow: 0 0 0 .35rem rgba(255, 255, 255, .14), 0 1.6rem 3rem rgba(0, 0, 0, .6);
+}
+
+.tv-profile:focus .tv-profile-name { color: #fff; }
+
+.tv-profiles-hint {
+    margin: 0;
+    font-size: .95rem;
+    color: #8b8b9c;
+}
+
+.tv-profiles-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.tv-exit {
+    padding: .6rem 1.1rem;
+    border: 2px solid transparent;
+    border-radius: .4rem;
+    color: #9aa0b4;
+    font-size: .95rem;
+    text-decoration: none;
+    transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.tv-exit:focus {
+    outline: none;
+    border-color: #fff;
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+}
+
+/* ==========================================================================
+   Search: on-screen keyboard + suggestions on the left, results grid on the
+   right (Netflix TV search layout). Uses spatial navigation.
+   ========================================================================== */
+
+.tv-search-layout {
+    display: grid;
+    grid-template-columns: 21rem minmax(0, 1fr);
+    gap: 3.2rem;
+    align-items: start;
+    min-height: 100vh;
+    padding: calc(var(--tv-nav-h) + 2rem) var(--tv-pad) 4rem;
+}
+
+.tv-search-rail {
+    position: sticky;
+    top: calc(var(--tv-nav-h) + .5rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+}
+
+/* What is being searched for, sitting above the back button. */
+.tv-search-query {
+    margin: 0 0 .1rem;
+    overflow: hidden;
+    color: #9fb4dc;
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tv-search-query[hidden] { display: none; }
+
+/* Needs to outrank the .tv-key grid button styles further down. */
+.tv-key.tv-key-back {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    height: auto;
+    min-height: 2.9rem;
+    padding: .8rem 1rem;
+    border: 2px solid rgba(255, 255, 255, .2);
+    border-radius: .45rem;
+    background: rgba(255, 255, 255, .05);
+    color: #e7e7ef;
+    font-size: .98rem;
+    font-weight: 600;
+    text-decoration: none;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.tv-key-back:focus {
+    outline: none;
+    border-color: #fff;
+    background: #fff;
+    color: #000;
+    transform: scale(1.02);
+}
+
+.tv-keyboard {
+    display: flex;
+    flex-direction: column;
+    gap: .38rem;
+}
+
+.tv-key-row {
+    display: flex;
+    gap: .38rem;
+}
+
+.tv-key {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 2.85rem;
+    display: grid;
+    place-items: center;
+    border: 2px solid transparent;
+    border-radius: .35rem;
+    background: rgba(255, 255, 255, .075);
+    color: #ececf2;
+    font: inherit;
+    font-size: 1.1rem;
+    font-weight: 600;
+    text-transform: lowercase;
+    cursor: pointer;
+    transition: background .14s ease, color .14s ease, transform .14s ease;
+}
+
+.tv-key:focus {
+    outline: none;
+    background: #fff;
+    color: #000;
+    transform: scale(1.07);
+}
+
+.tv-key-action {
+    font-size: .9rem;
+    text-transform: none;
+}
+
+.tv-key-space {
+    flex: 3 1 0;
+    text-transform: none;
+}
+
+.tv-search-rail-title {
+    margin: .5rem 0 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #d9d9e3;
+}
+
+.tv-suggestions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .1rem;
+}
+
+.tv-suggestion {
+    margin-left: -.5rem;
+    padding: .32rem .5rem;
+    border: 2px solid transparent;
+    border-radius: .35rem;
+    background: none;
+    color: #a9a9ba;
+    font: inherit;
+    font-size: 1rem;
+    text-align: left;
+    cursor: pointer;
+    transition: color .14s ease, background .14s ease;
+}
+
+.tv-suggestion:focus {
+    outline: none;
+    color: #fff;
+    background: rgba(255, 255, 255, .1);
+    border-color: rgba(255, 255, 255, .55);
+}
+
+.tv-search-results { min-width: 0; }
+
+.tv-query {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.4rem;
+    padding: .35rem 0;
+    border-bottom: 2px solid rgba(255, 255, 255, .16);
+}
+
+.tv-query > i {
+    font-size: 1.15rem;
+    color: #9a9aab;
+}
+
+.tv-query input {
+    flex: 1;
+    min-width: 0;
+    padding: .25rem 0;
+    border: 0;
+    outline: none;
+    background: none;
+    color: #fff;
+    font: inherit;
+    font-size: clamp(1.4rem, 2vw, 1.9rem);
+    font-weight: 700;
+}
+
+.tv-query input::placeholder {
+    color: #6f6f83;
+    font-weight: 500;
+}
+
+.tv-query:focus-within { border-color: #fff; }
+
+.tv-search-results .tv-status {
+    padding: 0;
+    margin: 0 0 .5rem;
+}
+
+.tv-result-grid-inner {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 1.3rem .9rem;
+}
+
+.tv-result-grid-inner .tv-card { width: 100%; }
+.tv-result-grid-inner .tv-card-media { height: auto; aspect-ratio: 2 / 3; }
+
+.tv-grid-title {
+    margin: 0 0 .65rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #e8e8f0;
+}
+
+/* ==========================================================================
+   Info / details
+   ========================================================================== */
+
+.tv-info-hero {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    min-height: 76vh;
+    padding: calc(var(--tv-nav-h) + 2.5rem) var(--tv-pad) 3.6rem;
+    overflow: hidden;
+}
+
+.tv-info-content {
+    position: relative;
+    z-index: 2;
+    max-width: 46rem;
+}
+
+.tv-info-title {
+    margin: 0 0 .9rem;
+    font-size: clamp(2.3rem, 4.2vw, 3.9rem);
+    font-weight: 900;
+    line-height: 1.02;
+    letter-spacing: -.03em;
+    text-shadow: 0 .3rem 1.4rem rgba(0, 0, 0, .6);
+}
+
+.tv-info-overview {
+    margin: 0;
+    max-width: 42rem;
+    font-size: 1.03rem;
+    line-height: 1.6;
+    color: #e3e3ec;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tv-episodes {
+    position: relative;
+    z-index: 3;
+    padding: .6rem 0 4rem;
+}
+
+.tv-episodes[hidden] { display: none; }
+
+.tv-episodes .tv-row-title:not(:first-child) { margin-top: 1.2rem; }
+
+.tv-episode-card { width: 19rem; }
+
+.tv-ep-number {
+    display: block;
+    margin: .55rem 0 .1rem;
+    font-size: .74rem;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #9393a5;
+}
+
+.tv-episode-card:focus .tv-ep-number { color: #d6dcf0; }
+
+.tv-pill {
+    flex: 0 0 auto;
+    padding: .55rem 1.15rem;
+    border: 2px solid transparent;
+    border-radius: .45rem;
+    background: rgba(255, 255, 255, .08);
+    color: #d0d0dd;
+    font: inherit;
+    font-size: .94rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.tv-pill.is-active {
+    background: rgba(255, 255, 255, .17);
+    color: #fff;
+}
+
+.tv-pill:focus {
+    outline: none;
+    border-color: #fff;
+    background: rgba(255, 255, 255, .22);
+    color: #fff;
+}
+
+/* ==========================================================================
+   Watch (player iframe)
+   ========================================================================== */
+
+body.tv-watch {
+    background: #000;
+    overflow: hidden;
+}
+
+.tv-watch iframe {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #000;
+}
+
+/* ==========================================================================
+   Accessibility / scaling
+   ========================================================================== */
+
+@media (max-width: 1100px) {
+    :root {
+        --tv-pad: 2.4rem;
+        --tv-card-w: 10rem;
+        --tv-card-h: 15rem;
+        --tv-expanded-w: 26.6rem;
+    }
+
+    .tv-nav { gap: 1.4rem; }
+    .tv-nav-clock { display: none; }
+    .tv-hero-title { font-size: clamp(2.2rem, 6vw, 3.2rem); }
+    .tv-hero-overview { -webkit-line-clamp: 2; }
+    .tv-profile-tile { width: 8.5rem; height: 8.5rem; font-size: 2.6rem; }
+    .tv-episode-card { width: 16rem; }
+
+    .tv-search-layout {
+        grid-template-columns: 17rem minmax(0, 1fr);
+        gap: 2rem;
+    }
+
+    .tv-key { height: 2.4rem; font-size: .95rem; }
+    .tv-result-grid-inner { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); }
+}
+
+@media (min-width: 2400px) {
+    :root {
+        --tv-pad: 6rem;
+        --tv-nav-h: 6.5rem;
+        --tv-card-w: 13.5rem;
+        --tv-card-h: 20.25rem;
+        --tv-expanded-w: 36rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

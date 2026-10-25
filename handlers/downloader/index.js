@@ -11,6 +11,7 @@
  *   getProgress(magnet?)                  -> Progress | Progress[]
  *   heartbeat(magnet)                     -> { ok, status, expiresIn }
  *   cancel(magnet, { deleteFiles })       -> Promise<boolean>
+ *   releaseIfUnwatched(magnet)            -> Promise<boolean>
  *
  * Everything is stored under <cwd>/downloads. A torrent is torn down (and its
  * data deleted) when no heartbeat() arrives within the timeout, so callers
@@ -815,6 +816,7 @@ function snapshot(job) {
     error: job.error,
     lastHeartbeat: job.lastHeartbeat,
     expiresIn: job.timer && job.deadline ? Math.max(0, job.deadline - Date.now()) : null,
+    viewers: job.viewers || 0,
   };
 }
 
@@ -1000,6 +1002,8 @@ function ensureJob(magnet, options = {}) {
       timer: null,
       deadline: null,
       lastHeartbeat: null,
+      viewers: 0,
+      lastStreamAt: null,
       startedAt: Date.now(),
       finishedAt: null,
       deleteFilesOnTimeout: true,
@@ -1054,6 +1058,29 @@ export async function cancel(magnet, { deleteFiles = false } = {}) {
   return true;
 }
 
+/**
+ * Tear a job down only when nobody is streaming it any more, deleting the
+ * downloaded data. Used when the player moves to another magnet (server
+ * switch): the previous torrent should not keep downloading in the
+ * background. A short grace window covers a seek that re-opened the stream.
+ *
+ * @param {string} magnet
+ * @param {{deleteFiles?:boolean, graceMs?:number}} [options]
+ * @returns {Promise<boolean>} true when the job was dropped
+ */
+export async function releaseIfUnwatched(magnet, { deleteFiles = true, graceMs = 8000 } = {}) {
+  const job = getJob(magnet);
+  if (!job) return false;
+  if ((job.viewers || 0) > 0) return false;
+  if (job.lastStreamAt && Date.now() - job.lastStreamAt < graceMs) return false;
+
+  console.log(`[download] releasing ${jobLabel(job)}: no one is watching`);
+  await destroyJob(job, { deleteFiles });
+  // Don't drop a replacement job a new request may have created meanwhile.
+  if (jobs.get(job.key) === job) jobs.delete(job.key);
+  return true;
+}
+
 /* ------------------------------------------------------------------ *
  * stream
  * ------------------------------------------------------------------ */
@@ -1083,7 +1110,20 @@ export async function stream(magnet, req, res, options = {}) {
   const { inline = true, disposition } = options;
   const job = ensureJob(magnet, options);
   job.lastHeartbeat = Date.now();
+  job.lastStreamAt = Date.now();
   job.status = 'downloading';
+
+  // One viewer per open stream request. The player switching servers closes
+  // its request, so a zero count is what lets releaseIfUnwatched() clean up.
+  job.viewers = (job.viewers || 0) + 1;
+  let viewerReleased = false;
+  const releaseViewer = () => {
+    if (viewerReleased) return;
+    viewerReleased = true;
+    job.viewers = Math.max(0, (job.viewers || 0) - 1);
+  };
+  res.on('close', releaseViewer);
+  res.on('finish', releaseViewer);
 
   const torrent = await addTorrent(magnet, { job });
 

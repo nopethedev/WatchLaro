@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<%- include('partials/head', { pageTitle: "Details" }) %>
+
+<body class="tv-body" data-tv-page="info" data-tv-type="<%= type %>" data-tv-id="<%= id %>"
+    data-tv-back="/tvui/home">
+    <%- include('partials/nav', { active: "" }) %>
+
+    <main class="tv-main">
+        <section class="tv-info-hero">
+            <div class="tv-info-media">
+                <img id="info-img" alt="">
+            </div>
+            <div class="tv-info-fade"></div>
+
+            <div class="tv-info-content">
+                <h1 class="tv-info-title" id="info-title">&nbsp;</h1>
+                <div class="tv-info-meta" id="info-meta"></div>
+                <p class="tv-info-overview" id="info-overview">Loading details…</p>
+
+                <div class="tv-info-actions" data-tv-row>
+                    <button type="button" class="tv-btn tv-btn-primary" id="info-play" data-tv-item>
+                        <i class="fa-solid fa-play" aria-hidden="true"></i>
+                        <span id="info-play-label">Play</span>
+                    </button>
+                    <button type="button" class="tv-btn tv-btn-ghost" id="info-back" data-tv-item>
+                        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="tv-episodes" id="tv-episodes" hidden aria-label="Episodes">
+            <h2 class="tv-row-title" id="seasons-title">Seasons</h2>
+            <div class="tv-row-track tv-pill-track" id="season-track" data-tv-row></div>
+
+            <h2 class="tv-row-title" id="episodes-title">Episodes</h2>
+            <div class="tv-row-track tv-episode-track" id="episode-track" data-tv-row></div>
+        </section>
+    </main>
+
+    <script src="/tvui.js"></script>
+</body>
+
+</html>

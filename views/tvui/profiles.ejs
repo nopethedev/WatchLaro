@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<%- include('partials/head', { pageTitle: "Who's watching?" }) %>
+
+<body class="tv-body" data-tv-page="profiles" data-tv-back="/">
+    <div class="tv-profiles-bg" id="profiles-bg"></div>
+    <div class="tv-profiles-shade"></div>
+
+    <main class="tv-profiles">
+        <div class="tv-profiles-logo" aria-hidden="true">
+            <span class="tv-logo-watch">Watch</span><span class="tv-logo-laro">Laro</span>
+        </div>
+
+        <h1 class="tv-profiles-title">Who's watching?</h1>
+
+        <div class="tv-profiles-row" data-tv-row>
+            <a class="tv-profile" href="/tvui/home" data-tv-item data-tv-autofocus>
+                <span class="tv-profile-tile"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+                <span class="tv-profile-name">Guest</span>
+            </a>
+        </div>
+
+        <p class="tv-profiles-hint">Only the guest profile is available right now.</p>
+
+        <div class="tv-profiles-actions" data-tv-row>
+            <a class="tv-exit" href="/?tv=0" data-tv-item>Use the standard site</a>
+        </div>
+    </main>
+
+    <script src="/tvui.js"></script>
+</body>
+
+</html>
