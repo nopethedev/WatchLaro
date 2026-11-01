@@ -140,11 +140,25 @@ export class TorrentHelper {
    */
   download(torrentId, options = {}, onProgress = null) {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      let metadataTimer = null;
+      const metadataTimeoutMs = Number.isFinite(Number(options.metadataTimeoutMs))
+        ? Number(options.metadataTimeoutMs)
+        : Number(process.env.TORRENT_METADATA_TIMEOUT_MS) || 90_000;
+
+      const settle = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(metadataTimer);
+        fn(value);
+      };
+
       try {
         // Rename on destructure so the imported `path` module stays usable here
-        const { onlyVideo = true, selectVideo, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
+        const { onlyVideo = true, selectVideo, metadataTimeoutMs: _timeout, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
 
         const torrent = this.client.add(torrentId, { ...webtorrentOpts, path: downloadPath }, (addedTorrent) => {
+          if (settled) return;
           this.activeDownloads.set(addedTorrent.infoHash, addedTorrent);
 
           // Prevent seeding: choke every peer so we never upload pieces to them,
@@ -167,7 +181,8 @@ export class TorrentHelper {
             });
             addedTorrent.deselect(0, addedTorrent.pieces.length - 1, false);
             addedTorrent._laroVideoFiles = videoFiles;
-            videoFiles.forEach((file) => file.select());
+            // A pause requested before metadata arrived stays paused once it does.
+            if (!addedTorrent._laroPaused) videoFiles.forEach((file) => file.select());
           }
 
           // Setup progress updates if listener callback provided
@@ -185,14 +200,28 @@ export class TorrentHelper {
             });
           }
 
-          resolve(addedTorrent);
+          settle(resolve, addedTorrent);
         });
 
-        torrent.on('error', (err) => {
-          reject(err);
-        });
+        // Track the torrent immediately: pause/skip must work during the
+        // metadata handshake, before WebTorrent has a file list (and before a
+        // magnet has even parsed its infoHash).
+        const requestedHash = typeof torrentId === 'string'
+          ? (/btih:([a-z0-9]+)/i.exec(torrentId)?.[1] || '').toLowerCase()
+          : '';
+        if (requestedHash) this.activeDownloads.set(requestedHash, torrent);
+        if (torrent.infoHash) this.activeDownloads.set(torrent.infoHash, torrent);
+
+        torrent.on('error', (err) => settle(reject, err));
+
+        // A dead magnet otherwise leaves the serial queue "downloading"
+        // forever, with nothing the operator can pause or skip.
+        metadataTimer = setTimeout(() => {
+          settle(reject, new Error('torrent metadata timed out - no peers found for this magnet'));
+        }, metadataTimeoutMs);
+        if (typeof metadataTimer.unref === 'function') metadataTimer.unref();
       } catch (err) {
-        reject(err);
+        settle(reject, err);
       }
     });
   }
@@ -282,9 +311,15 @@ export class TorrentHelper {
    * @returns {boolean} True if a pending job was told to skip.
    */
   requestSkip(infoHash) {
-    const finish = infoHash && this._waiters.get(infoHash);
-    if (!finish) return false;
-    finish();
+    const torrent = this.findClientTorrent(infoHash) || this.activeDownloads.get(String(infoHash || '').toLowerCase());
+    if (!torrent) return false;
+
+    // Skipping before metadata arrives is allowed: the download wait is
+    // skipped as soon as the file list is known. It is still a valid job,
+    // unlike a magnet the server never started.
+    torrent._laroSkipRequested = true;
+    const finish = this._waiters.get(torrent.infoHash);
+    if (finish) finish();
     return true;
   }
 
@@ -308,7 +343,7 @@ export class TorrentHelper {
     // 1. Download torrent with video selection enabled
     const torrent = await this.download(
       torrentId,
-      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo },
+      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo, metadataTimeoutMs: options.metadataTimeoutMs },
       (stats) => {
         if (typeof onProgress === 'function') {
           onProgress({ stage: 'download', ...stats });
@@ -335,9 +370,10 @@ export class TorrentHelper {
       }
     }
 
-    // 3. Wait until download is 100% complete
+    // 3. Wait until download is 100% complete (unless the operator asked to
+    // convert what is already on disk).
     if (torrent._laroVideoFiles && !torrent._laroVideoFiles.length) throw new Error('No matching video file found in torrent.');
-    if (!torrent.done) {
+    if (!torrent.done && !torrent._laroSkipRequested) {
       await this.waitForDone(torrent);
     }
 
@@ -394,7 +430,8 @@ export class TorrentHelper {
    * @returns {Object|null} Formatted progress details or null if not found.
    */
   getProgress(infoHash) {
-    const torrent = this.activeDownloads.get(infoHash) || this.findClientTorrent(infoHash);
+    const wanted = String(infoHash || '').toLowerCase();
+    const torrent = this.activeDownloads.get(wanted) || this.findClientTorrent(wanted);
 
     if (!torrent) {
       return null;
@@ -442,17 +479,21 @@ export class TorrentHelper {
    * @returns {boolean} True if the torrent was found and paused.
    */
   pause(infoHash) {
-    const torrent = this.activeDownloads.get(infoHash);
-    if (!torrent || !torrent.files) {
+    // activeDownloads is set as soon as the torrent is added, so this also
+    // works while metadata is still being fetched (files are not known yet).
+    const torrent = this.findClientTorrent(infoHash) || this.activeDownloads.get(String(infoHash || '').toLowerCase());
+    if (!torrent) {
       return false;
     }
 
-    torrent.files.forEach((file) => file.deselect());
-    if (typeof torrent.deselect === 'function') {
-      // Clear the whole-torrent selection added by WebTorrent on add()
-      torrent.deselect(0, torrent.pieces.length - 1, false);
-    }
     torrent._laroPaused = true;
+    if (Array.isArray(torrent.files) && torrent.files.length) {
+      torrent.files.forEach((file) => file.deselect());
+      if (typeof torrent.deselect === 'function' && torrent.pieces) {
+        // Clear the whole-torrent selection added by WebTorrent on add()
+        torrent.deselect(0, torrent.pieces.length - 1, false);
+      }
+    }
     return true;
   }
 
@@ -462,17 +503,16 @@ export class TorrentHelper {
    * @returns {boolean} True if the torrent was found and resumed.
    */
   resume(infoHash) {
-    const torrent = this.activeDownloads.get(infoHash);
-    if (!torrent || !torrent.files) {
+    const torrent = this.findClientTorrent(infoHash) || this.activeDownloads.get(String(infoHash || '').toLowerCase());
+    if (!torrent) {
       return false;
     }
 
-    torrent.files.forEach((file) => {
-      if ((torrent._laroVideoFiles || torrent.files).includes(file) && this.isVideoFile(file.name)) {
-        file.select();
-      }
-    });
     torrent._laroPaused = false;
+    if (Array.isArray(torrent.files) && torrent.files.length) {
+      const videos = torrent._laroVideoFiles || torrent.files.filter((file) => this.isVideoFile(file.name));
+      videos.forEach((file) => file.select());
+    }
     return true;
   }
 
@@ -484,13 +524,15 @@ export class TorrentHelper {
    */
   remove(infoHash, destroyStore = false) {
     return new Promise((resolve) => {
-      const torrent = this.activeDownloads.get(infoHash) || this.findClientTorrent(infoHash);
+      const wanted = String(infoHash || '').toLowerCase();
+      const torrent = this.activeDownloads.get(wanted) || this.findClientTorrent(wanted);
       if (!torrent) {
         return resolve(false);
       }
 
       torrent.destroy({ destroyStore }, () => {
-        this.activeDownloads.delete(infoHash);
+        this.activeDownloads.delete(wanted);
+        if (torrent.infoHash) this.activeDownloads.delete(torrent.infoHash);
         resolve(true);
       });
     });

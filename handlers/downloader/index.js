@@ -19,7 +19,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { path as ffmpegBinary } from '@ffmpeg-installer/ffmpeg';
@@ -1410,7 +1410,14 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
       await transcode(job, sourcePath, outputPath, buildOutputOptions(probe));
       logMilestone(job, 'transcode', 100);
     } else {
-      console.log(`[download] already browser-ready ${jobLabel(job)}, skipping transcode`);
+      // Already a browser-ready mp4: no transcode needed, but callers still
+      // expect the requested outputPath to exist. Move it into place instead
+      // of reporting a finished job whose file was never created.
+      if (path.resolve(sourcePath) !== path.resolve(outputPath)) {
+        rmSync(outputPath, { force: true });
+        renameSync(sourcePath, outputPath);
+      }
+      console.log(`[download] already browser-ready ${jobLabel(job)}, kept as "${path.basename(outputPath)}"`);
     }
 
     job.outputPath = outputPath;
