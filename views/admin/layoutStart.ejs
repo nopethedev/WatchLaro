@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title><%= title %> · WatchLaro Admin</title><link rel="stylesheet" href="/styles.css"><script src="/admin.js"></script></head>
+<body class="min-h-screen bg-slate-950 text-white">
+<%- include('../header.ejs') %>
+<div class="admin-panel relative flex min-h-[calc(100vh-4rem)] [color-scheme:dark]" x-data="{ adminNavOpen: false }" @keydown.escape.window="adminNavOpen = false">
+<button type="button" class="btn fixed bottom-4 left-4 z-40 shadow-lg md:hidden" @click="adminNavOpen = !adminNavOpen" :aria-expanded="adminNavOpen" x-ref="adminMenuToggle" aria-controls="admin-sidebar" aria-label="Toggle admin navigation"><i class="fa-solid fa-bars" aria-hidden="true"></i> Admin menu</button>
+<div x-show="adminNavOpen" x-cloak class="fixed inset-0 z-40 bg-black/60 md:hidden" @click="adminNavOpen = false" aria-hidden="true"></div>
+<%- include('sidebar', { active }) %>
+<div class="admin-workspace"><main class="admin-main">

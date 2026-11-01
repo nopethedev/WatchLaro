@@ -32,3 +32,120 @@
 .users-list-text-with-icon{
   @apply flex items-center gap-1
 }
+/* Admin components share the home page Tailwind palette. */
+@layer components {
+.admin-panel .admin-sidebar { @apply fixed inset-y-0 left-0 z-40 flex w-60 -translate-x-full flex-col border-r border-slate-700 bg-slate-900 p-5 transition-transform lg:translate-x-0; }
+.admin-panel .admin-sidebar.open { @apply translate-x-0; }
+.admin-panel .admin-sidebar nav { @apply grid gap-1; }
+.admin-panel .admin-sidebar nav a { @apply flex items-center gap-3 rounded-md p-3 text-sm text-slate-300 hover:bg-slate-800; }
+.admin-panel .admin-sidebar nav a.active { @apply bg-blue-900 text-blue-100; }
+.admin-panel .brand { @apply flex items-center gap-3 text-xl font-black tracking-tight; }
+.admin-panel .brand small { @apply mt-1 block text-[10px] font-normal tracking-widest text-slate-400; }
+.admin-panel .brand-mark { @apply rounded-lg bg-brand px-3 py-2 text-white; }
+.admin-panel .nav-label { @apply mx-3 mt-9 mb-3 text-xs font-bold tracking-widest text-slate-400; }
+.admin-panel .nav-icon { @apply w-5 text-center text-lg; }
+.admin-panel .sidebar-bottom { @apply mt-auto border-t border-slate-700 pt-5; }
+.admin-panel .account { @apply mt-5 flex items-center gap-3; }
+.admin-panel .account strong { @apply block text-sm; }
+.admin-panel .account small { @apply text-xs text-slate-400; }
+.admin-panel .avatar { @apply grid size-7 shrink-0 place-items-center rounded-md bg-slate-700 font-bold text-white; }
+.admin-panel .admin-workspace { @apply min-w-0 flex-1; }
+.admin-panel .admin-topbar { @apply flex min-h-16 items-center justify-between gap-3 border-b border-slate-700 bg-gray-950 px-4 sm:px-8; }
+.admin-panel .breadcrumb { @apply text-xs text-slate-400; }
+.admin-panel .breadcrumb span { @apply ml-3 text-white; }
+.admin-panel .top-actions { @apply flex items-center gap-3; }
+.admin-panel .top-status { @apply hidden sm:inline; }
+.admin-panel .status-dot { @apply mr-2 inline-block size-1.5 rounded-full bg-emerald-400; }
+.admin-panel .admin-main { @apply w-full px-3 pt-4 pb-24 sm:px-6 md:pb-4; }
+.admin-panel .page-heading { @apply mb-4 flex flex-wrap items-center justify-between gap-3; }
+.admin-panel .page-heading h1 { @apply my-1 text-xl font-bold; }
+.admin-panel .page-heading p,.admin-panel .muted { @apply text-sm text-slate-400; }
+.admin-panel .eyebrow { @apply hidden; }
+.admin-panel .btn { @apply inline-flex min-h-8 items-center justify-center gap-2 rounded-md bg-slate-700 px-3 py-1 text-sm font-medium text-white transition-all duration-150 hover:scale-105 hover:bg-slate-600 disabled:hover:scale-100 motion-reduce:transform-none motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400; }
+.admin-panel .btn.primary { @apply bg-brand hover:bg-blue-600; }
+.admin-panel .btn.danger { @apply bg-red-600 text-white hover:bg-red-500; }
+.admin-panel .btn.small { @apply min-h-7 px-2 py-1 text-xs; }
+.admin-panel .btn.ghost { @apply bg-transparent hover:bg-slate-800; }
+.admin-panel .panel { @apply mb-4 overflow-hidden rounded-md bg-slate-900 p-2; }
+.admin-panel .panel-head { @apply flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-800 p-2; }
+.admin-panel .panel-head h2 { @apply text-base font-bold; }
+.admin-panel .panel-body { @apply p-3 sm:p-4; }
+.admin-panel .stat-grid { @apply mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4; }
+.admin-panel .stat { @apply rounded-md bg-slate-800 p-3; }
+.admin-panel .stat-label { @apply text-sm text-slate-400; }
+.admin-panel .stat-value { @apply my-2 text-2xl font-bold; }
+.admin-panel .stat-foot { @apply text-xs text-blue-300; }
+.admin-panel .two-col { @apply grid gap-4 xl:grid-cols-[1.5fr_1fr]; }
+.admin-panel .toolbar { @apply flex flex-wrap items-center gap-2 rounded-md bg-gray-800 p-2; }
+.admin-panel .search { @apply min-w-40 flex-1; }
+.admin-panel .form-grid { @apply grid gap-4 sm:grid-cols-2; }
+.admin-panel .form-label { @apply grid gap-2 text-sm text-slate-200; }
+.admin-panel .form-label small { @apply text-xs text-slate-400; }
+.admin-panel .span-2 { @apply sm:col-span-2; }
+.admin-panel .form-actions { @apply mt-6 flex flex-wrap items-center gap-3; }
+.admin-panel .notice { @apply mb-3 rounded-md bg-blue-950 px-3 py-2 text-sm leading-relaxed break-words text-blue-100; }
+.admin-panel .notice.error { @apply border-red-800 bg-red-950/50 text-red-200; }
+.admin-panel .notice.success { @apply border-emerald-800 bg-emerald-950/50 text-emerald-200; }
+.admin-panel .empty { @apply px-4 py-8 text-center text-slate-400; }
+.admin-panel .empty strong { @apply mb-3 block text-lg font-bold text-white; }
+.admin-panel .pagination { @apply flex flex-wrap items-center justify-between gap-3 px-2 py-3 text-sm text-slate-400; }
+.admin-panel .actions { @apply flex flex-wrap items-center gap-2; }
+.admin-panel .badge { @apply inline-flex rounded-md bg-slate-700 px-2 py-1 text-xs font-medium capitalize text-blue-100; }
+.admin-panel .badge.done { @apply bg-emerald-900 text-emerald-200; }
+.admin-panel .badge.failed { @apply bg-red-950 text-red-200; }
+.admin-panel .badge.downloading,.admin-panel .badge.transcoding { @apply bg-blue-900 text-blue-200; }
+.admin-panel .badge.paused { @apply bg-amber-950 text-amber-200; }
+.admin-panel .media-card { @apply relative mt-2 grid min-h-24 grid-cols-[minmax(0,1fr)] items-center overflow-hidden rounded-md bg-slate-800 xl:grid-cols-[minmax(0,1fr)_auto]; }
+.admin-panel .media-card .actions { @apply relative z-10 col-start-1 px-3 pb-2.5 xl:col-start-auto xl:py-2.5 xl:pr-3 xl:pl-0; }
+.admin-panel .media-card .actions .btn { @apply shadow-md; }
+.admin-panel .media-symbol { @apply grid size-8 shrink-0 place-items-center rounded-md bg-slate-700 text-blue-300; }
+.admin-panel .media-name { @apply mb-1 text-sm leading-normal font-bold break-words; }
+.admin-panel .media-meta { @apply flex flex-wrap items-center gap-2 text-xs text-slate-300; }
+.admin-panel .progress { @apply mt-2 h-1 overflow-hidden rounded-full bg-slate-700; }
+.admin-panel .media-art { @apply pointer-events-none absolute inset-0 bg-cover bg-center; }
+.admin-panel .media-art-grey { @apply grayscale brightness-50; }
+.admin-panel .media-art-color { @apply brightness-[.6] transition-[clip-path] duration-700 ease-out motion-reduce:transition-none; }
+.admin-panel .media-scrim { @apply pointer-events-none absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/80 to-slate-900/60; }
+.admin-panel .media-fill { @apply pointer-events-none absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500/10 to-blue-500/40 transition-all duration-700 motion-reduce:transition-none; }
+.admin-panel .media-body { @apply relative z-10 min-w-0 px-3 py-2.5; }
+.admin-panel .recent-row { @apply mt-2 flex flex-wrap items-center gap-2 rounded-md bg-slate-800 px-3 py-2; }
+.admin-panel .progress>span { @apply block h-full bg-blue-500 transition-all motion-reduce:transition-none; }
+.admin-panel .table-wrap { @apply overflow-x-auto; }
+.admin-panel table { @apply w-full border-collapse text-left; }
+.admin-panel th { @apply bg-gray-800 px-3 py-2 text-xs font-bold text-slate-300; }
+.admin-panel td { @apply border-t-4 border-slate-900 bg-slate-800 px-3 py-2 text-sm; }
+.admin-panel td strong { @apply block; }
+.admin-panel td small { @apply text-slate-400; }
+.admin-panel .person { @apply flex items-center gap-3; }
+.admin-panel .setting-row { @apply flex flex-col justify-between gap-2 border-b border-slate-700 py-4 text-sm last:border-0 sm:flex-row; }
+.admin-panel .setting-row span { @apply text-slate-400; }
+.admin-panel .setting-row strong { @apply font-medium break-words sm:max-w-2/3 sm:text-right; }
+.admin-panel .quick-link { @apply flex items-center gap-3 border-b border-slate-700 py-3 last:border-0; }
+.admin-panel .quick-link strong { @apply mb-1 block text-sm; }
+.admin-panel .quick-link small { @apply text-xs text-slate-400; }
+.admin-panel .quick-link>span:last-child { @apply ml-auto; }
+.admin-panel .step { @apply mr-3 inline-grid size-7 place-items-center rounded-md bg-blue-900 text-xs text-blue-200; }
+.admin-panel .result-grid { @apply mt-5 grid grid-cols-[repeat(auto-fill,minmax(145px,1fr))] gap-4; }
+.admin-panel .title-card { @apply overflow-hidden rounded-lg border border-slate-700 bg-slate-800 text-left hover:border-blue-400; }
+.admin-panel .title-card img { @apply aspect-[2/3] w-full object-cover; }
+.admin-panel .title-card strong { @apply block px-3 pt-3 text-sm; }
+.admin-panel .title-card small { @apply block px-3 pb-4 text-slate-400; }
+.admin-panel .episode-row { @apply flex flex-wrap items-center gap-3 border-b border-slate-700 py-4; }
+.admin-panel .episode-row small { @apply mt-1 block text-xs text-slate-400; }
+.admin-panel .episode-title { @apply min-w-40 flex-1; }
+.admin-panel .torrent-row { @apply mt-3 w-full rounded-lg border border-slate-700 bg-slate-800 p-4 text-left leading-relaxed break-words hover:border-blue-400; }
+.admin-panel .mobile-menu { @apply lg:hidden; }
+.admin-panel .note { @apply my-3 text-sm leading-relaxed text-slate-400; }
+.admin-panel .stack { @apply grid gap-5; }
+.admin-panel .loading-bar { @apply h-1 animate-pulse bg-blue-500 motion-reduce:animate-none; }
+.admin-panel input:not([type=checkbox]),.admin-panel select,.admin-panel textarea { @apply rounded-md border border-slate-600 bg-gray-700 px-3 py-2 text-white focus-visible:outline-2 focus-visible:outline-blue-500; }
+.admin-panel input:not([type=checkbox]),.admin-panel textarea { @apply w-full; }
+.admin-panel input[type=checkbox] { @apply size-4 accent-blue-500; }
+.admin-panel input::placeholder,.admin-panel textarea::placeholder { @apply text-slate-500; }
+.admin-panel button { @apply cursor-pointer disabled:cursor-not-allowed disabled:opacity-40; }
+.admin-panel fieldset { @apply min-w-0; }
+.admin-panel dialog { @apply m-auto max-h-[90vh] w-[min(570px,calc(100%-30px))] overflow-auto rounded-md bg-slate-900 p-5 text-white; }
+.admin-panel dialog::backdrop { @apply bg-black/75; }
+.admin-panel dialog h2 { @apply mb-5 text-xl font-bold; }
+.admin-panel [x-cloak] { @apply hidden; }
+}

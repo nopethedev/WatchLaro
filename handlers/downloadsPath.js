@@ -9,7 +9,7 @@ export function resolveStoredFile(storedPath) {
   if (!storedPath || storedPath === "/pending") return null;
 
   const direct = path.resolve(downloadsDir, storedPath);
-  if (direct.startsWith(downloadsDir) && fs.existsSync(direct) && fs.statSync(direct).isFile()) {
+  if (direct.startsWith(downloadsDir + path.sep) && fs.existsSync(direct) && fs.statSync(direct).isFile()) {
     return direct;
   }
 
@@ -22,7 +22,7 @@ export function resolveStoredFile(storedPath) {
     for (const entry of fs.readdirSync(downloadsDir, { recursive: true, withFileTypes: true })) {
       if (entry.isFile() && entry.name === name) {
         const full = path.join(entry.parentPath ?? entry.path, entry.name);
-        if (full.startsWith(downloadsDir)) return full;
+        if (full.startsWith(downloadsDir + path.sep)) return full;
       }
     }
   } catch (err) {

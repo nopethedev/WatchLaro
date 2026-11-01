@@ -1,39 +1,19 @@
+import { User } from '../database/index.js';
 
-const checkSession = function(req, res, next) {
-    if (req.session.user?.uuid) {
-        next();
-    } else {
-        //res.render('accessdenied.ejs')
-        res.redirect(403, '/login')
-    }
-}
-
-const checkManager = function(req,res, next) {
-    if (req.session.user?.rank){
-        if(req.session.user.rank == "manager" || req.session.user.rank == "admin"){
-            next();
-        }else{
-            res.status(403);
-            res.render('accessDenied.js');
+async function authorize(req, res, next, ranks) {
+    try {
+        const uuid = req.session?.user?.uuid;
+        const user = uuid ? await User.findOne({ where: { uuid }, attributes: ['uuid', 'username', 'rank'] }) : null;
+        if (user && (!ranks || ranks.includes(user.rank))) {
+            req.session.user = { uuid: user.uuid, username: user.username, rank: user.rank };
+            Object.assign(res.locals, req.session.user);
+            return next();
         }
-    }else{
-        res.status(403);
-        res.render('accessDenied.ejs');
-    }
+        if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'You do not have permission to perform this action.' });
+        return res.status(403).render('accessDenied.ejs');
+    } catch (err) { next(err); }
 }
-
-const checkAdmin = function(req,res, next) {
-    if (req.session.user?.rank){
-        if(req.session.user.rank == "admin"){
-            next();
-        }else{
-            res.status(403);
-            res.render('accessDenied.js');
-        }
-    }else{
-        res.status(403);
-        res.render('accessDenied.ejs');
-    }
-}
-
-export default {checkSession, checkManager, checkAdmin}
+const checkSession = (req, res, next) => authorize(req, res, next);
+const checkManager = (req, res, next) => authorize(req, res, next, ['manager', 'admin']);
+const checkAdmin = (req, res, next) => authorize(req, res, next, ['admin']);
+export default { checkSession, checkManager, checkAdmin };

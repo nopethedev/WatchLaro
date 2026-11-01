@@ -1,30 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
-    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laro - Admin Panel</title>
-
-</head>
-
-<body>
-    <div class="flex flex-col min-h-screen">
-        <%- include('../header.ejs') %>
-
-            <div class="flex flex-1">
-                <%- include('sidebar.ejs') %>
-                    <div class="flex-1 bg-slate-950">
-                        <h1
-                            class="text-4xl font-black bg-linear-to-b from-brand to-cyan-300 bg-clip-text text-transparent">
-                            Welcome
-                            to Laro</h1>
-                    </div>
-            </div>
-    </div>
-
-</body>
-
-</html>
+<%- include('layoutStart', { title:'Overview', active:'overview' }) %>
+<div class="page-heading"><div><div class="eyebrow">YOUR LIBRARY, AT A GLANCE</div><h1>Admin Panel</h1><p>Here's what's happening on your WatchLaro server.</p></div><a class="btn primary" href="/admin/media/create">＋ New download</a></div>
+<div class="stat-grid"><div class="stat"><div class="stat-label">Total media</div><div class="stat-value"><%= total %></div><span class="stat-foot">Movies & series episodes</span></div><div class="stat"><div class="stat-label">Ready to watch</div><div class="stat-value"><%= counts.done || 0 %></div><span class="stat-foot">Available from your server</span></div><div class="stat"><div class="stat-label">In the pipeline</div><div class="stat-value"><%= (counts.downloading || 0)+(counts.transcoding || 0) %></div><span class="stat-foot"><%= queueSettings.pauseQueue ? 'Queue paused' : 'Queue accepting jobs' %></span></div><div class="stat"><div class="stat-label">Needs attention</div><div class="stat-value"><%= (counts.failed || 0)+(counts.paused || 0) %></div><a class="stat-foot" href="/admin/media?status=failed">Review downloads →</a></div></div>
+<div class="two-col"><section class="panel"><div class="panel-head"><h2>Recent media</h2><a class="btn small ghost" href="/admin/media">View library →</a></div><% if (!recent.length) { %><div class="empty"><strong>A fresh start for your library</strong>Add your first movie or episode to get started.<div class="form-actions justify-center"><a class="btn primary" href="/admin/media/create">Find something to watch</a></div></div><% } %><% for (const file of recent) { %><div class="recent-row"><span class="media-symbol"><%= file.type === 'tv' ? '▣' : '▶' %></span><div><div class="media-name"><%= file.name %></div><div class="media-meta"><span><%= file.quality %></span><span><%= file.type === 'tv' ? `Season ${file.season} · Episode ${file.episode}` : 'Movie' %></span></div></div><span class="badge <%= file.status %>"><%= file.status %></span></div><% } %></section>
+<div><section class="panel"><div class="panel-head"><h2>Storage health</h2><span class="badge done">Live</span></div><div class="panel-body"><div class="stat-value"><%= (disk.free/1024**3).toFixed(1) %> <small class="font-normal text-slate-400">GB free</small></div><div class="progress"><span style="width:<%= Math.min(100,100*(1-disk.free/disk.size)).toFixed(1) %>%"></span></div><p class="note"><%= ((disk.size-disk.free)/1024**3).toFixed(1) %> GB used of <%= (disk.size/1024**3).toFixed(1) %> GB on the download drive.</p><a class="btn small ghost" href="/admin/settings">Server details →</a></div></section>
+<section class="panel"><div class="panel-head"><h2>Quick access</h2></div><div class="panel-body"><a class="quick-link" href="/admin/media/create"><span class="avatar">↓</span><div><strong>Grow your collection</strong><small>Movies, individual episodes or a series</small></div><span>↗</span></a><% if(users !== null){ %><a class="quick-link" href="/admin/users"><span class="avatar">♙</span><div><strong>Manage your people</strong><small><%= users %> registered accounts</small></div><span>↗</span></a><% } %><a class="quick-link" href="/admin/settings"><span class="avatar">⚙</span><div><strong>Server preferences</strong><small>Queue controls and default quality</small></div><span>↗</span></a></div></section></div></div>
+<%- include('layoutEnd') %>

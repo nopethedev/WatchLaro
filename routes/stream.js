@@ -4,6 +4,20 @@ import path from 'node:path';
 import NodeCache from 'node-cache';
 import * as downloader from '../handlers/downloader/index.js';
 import tmdb from '../handlers/downloader/tmdb.js';
+import { Files } from '../database/index.js';
+import { resolveStoredFile } from '../handlers/downloadsPath.js';
+
+async function libraryFile(id, season, episode) {
+    const isTV = season !== undefined && season !== '' && episode !== undefined && episode !== '';
+    const rows = await Files.findAll({ where: { linkedId: Number(id), type: isTV ? 'tv' : 'movie',
+        season: isTV ? Number(season) : null, episode: isTV ? Number(episode) : null, status: 'done' }, order: [['createdAt', 'DESC']] });
+    for (const row of rows) {
+        const file = resolveStoredFile(row.path);
+        if (file) return file;
+    }
+    return null;
+}
+const localProgress = { ok: true, status: 'done', stage: 'done', done: true, progress: 100, percent: 100, source: 'library', subtitles: [] };
 
 const router = express.Router();
 
@@ -164,10 +178,10 @@ function scheduleRelease(magnet) {
 
 /** Serve a finished transcode (downloads/<outputFile>) with range support. */
 /** @returns {boolean} true when the file existed and the response was sent. */
-function serveFinishedFile(req, res, outputFile) {
+function serveFinishedFile(req, res, outputFile, stored = false) {
     if (!outputFile) return false;
-    const abs = path.join(downloader.DOWNLOADS_DIR, path.basename(outputFile));
-    if (!abs.startsWith(downloader.DOWNLOADS_DIR) || !fs.existsSync(abs)) return false;
+    const abs = stored ? outputFile : path.join(downloader.DOWNLOADS_DIR, path.basename(outputFile));
+    if (!fs.existsSync(abs)) return false;
 
     const stat = fs.statSync(abs);
     const size = stat.size;
@@ -217,6 +231,8 @@ async function handleStream(req, res) {
     const session = sanitizeSession(req.query.session);
     console.log(`[stream] incoming stream request ${describeTarget(id, season, episode)}`);
     try {
+        const local = await libraryFile(id, season, episode);
+        if (local && serveFinishedFile(req, res, local, true)) return;
         const magnet = await magnetFor(id, season, episode, session);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
 
@@ -242,6 +258,7 @@ async function handleSubs(req, res) {
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
     console.log(`[stream] incoming subs request ${describeTarget(id, season, episode)}${lang ? ` lang=${lang}` : ''}`);
     try {
+        if (await libraryFile(id, season, episode)) return res.status(404).json({ error: 'No library subtitles available' });
         const magnet = await magnetFor(String(id), season, episode, session);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
 
@@ -285,6 +302,11 @@ async function handleDownload(req, res) {
     const session = sanitizeSession(req.query.session);
     console.log(`[stream] incoming download request ${describeTarget(id, season, episode)}`);
     try {
+        const local = await libraryFile(id, season, episode);
+        if (local) {
+            if (req.path.includes('/download/')) return res.json(localProgress);
+            if (serveFinishedFile(req, res, local, true)) return;
+        }
         const magnet = await magnetFor(id, season, episode, session);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
 
@@ -323,6 +345,7 @@ router.post('/api/stream/source', async (req, res) => {
     console.log(`[stream] source switch (${step > 0 ? 'next' : 'prev'}) for ${describeTarget(id, season, episode)}`);
 
     try {
+        if (await libraryFile(id, season, episode)) return res.json({ ok: true, count: 1, total: 1, index: 1, changed: false, source: 'library' });
         const magnets = await resolveCandidates(id, season, episode);
         if (!magnets.length) return res.status(404).json({ error: 'no torrent found' });
 
@@ -376,6 +399,7 @@ router.get('/api/stream/sources', async (req, res) => {
     }
 
     try {
+        if (await libraryFile(id, season, episode)) return res.json({ ok: true, count: 1, total: 1, index: 1, changed: false, source: 'library' });
         const magnets = await resolveCandidates(id, season, episode);
         if (!magnets.length) return res.status(404).json({ error: 'no torrent found' });
 
@@ -397,6 +421,10 @@ router.get('/api/stream/progress', async (req, res) => {
     console.log(`[stream] incoming progress request ${describeTarget(id, season, episode)}`);
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
     try {
+        if (await libraryFile(id, season, episode)) {
+            if (req.path.includes('/subs/')) return res.status(404).json({ error: 'No library subtitles available' });
+            return res.json(localProgress);
+        }
         const magnet = await magnetFor(String(id), season, episode, session);
         if (!magnet) return res.status(404).json({ status: 'error', error: 'no torrent found' });
         res.json(downloader.getProgress(magnet));
@@ -431,6 +459,7 @@ router.post('/api/stream/heartbeat', async (req, res) => {
         console.log('[heartbeat] rejected: missing id');
         return res.status(400).json({ ok: false, status: 'idle' });
     }
+    if (await libraryFile(id, season, episode)) return res.json(localProgress);
     const magnet = sessionMagnet(String(id), season, episode, session)
         || magnetCache.get(keyFor(String(id), season, episode));
     if (!magnet) {

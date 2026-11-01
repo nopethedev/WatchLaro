@@ -142,7 +142,7 @@ export class TorrentHelper {
     return new Promise((resolve, reject) => {
       try {
         // Rename on destructure so the imported `path` module stays usable here
-        const { onlyVideo = true, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
+        const { onlyVideo = true, selectVideo, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
 
         const torrent = this.client.add(torrentId, { ...webtorrentOpts, path: downloadPath }, (addedTorrent) => {
           this.activeDownloads.set(addedTorrent.infoHash, addedTorrent);
@@ -159,12 +159,14 @@ export class TorrentHelper {
             // a shared piece would otherwise drop the video's selection for it
             const videoFiles = [];
             addedTorrent.files.forEach((file) => {
-              if (this.isVideoFile(file.name)) {
+              if (this.isVideoFile(file.name) && (!selectVideo || selectVideo(file.name))) {
                 videoFiles.push(file);
               } else {
                 file.deselect();
               }
             });
+            addedTorrent.deselect(0, addedTorrent.pieces.length - 1, false);
+            addedTorrent._laroVideoFiles = videoFiles;
             videoFiles.forEach((file) => file.select());
           }
 
@@ -228,7 +230,7 @@ export class TorrentHelper {
       return Promise.resolve(torrent);
     }
 
-    const videoFiles = (torrent.files || []).filter((file) => this.isVideoFile(file.name));
+    const videoFiles = torrent._laroVideoFiles || (torrent.files || []).filter((file) => this.isVideoFile(file.name));
     const pending = videoFiles.filter((file) => !file.done);
 
     // All video files already completed
@@ -244,6 +246,7 @@ export class TorrentHelper {
         this._waiters.delete(torrent.infoHash);
         torrent.removeListener('done', onTorrentDone);
         torrent.removeListener('error', onError);
+        torrent.removeListener('close', onClose);
         pending.forEach((file) => file.removeListener('done', onFileDone));
       };
       const finish = () => {
@@ -257,6 +260,7 @@ export class TorrentHelper {
         cleanup();
         reject(err);
       };
+      const onClose = () => onError(new Error('Download cancelled'));
       const onFileDone = () => {
         remaining -= 1;
         if (remaining <= 0) finish();
@@ -265,6 +269,7 @@ export class TorrentHelper {
       this._waiters.set(torrent.infoHash, finish);
       torrent.once('done', onTorrentDone);
       torrent.once('error', onError);
+      torrent.once('close', onClose);
       pending.forEach((file) => file.once('done', onFileDone));
     });
   }
@@ -303,7 +308,7 @@ export class TorrentHelper {
     // 1. Download torrent with video selection enabled
     const torrent = await this.download(
       torrentId,
-      { path: downloadDir, onlyVideo },
+      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo },
       (stats) => {
         if (typeof onProgress === 'function') {
           onProgress({ stage: 'download', ...stats });
@@ -315,7 +320,7 @@ export class TorrentHelper {
     // caller so it can persist the real name, path and infoHash.
     if (typeof options.onReady === 'function') {
       const readyVideoFiles = torrent.files
-        .filter((file) => this.isVideoFile(file.name))
+        .filter((file) => this.isVideoFile(file.name) && (!options.selectVideo || options.selectVideo(file.name)))
         .sort((a, b) => b.length - a.length);
       const readyVideoFile = readyVideoFiles[0] || torrent.files[0] || null;
 
@@ -331,12 +336,13 @@ export class TorrentHelper {
     }
 
     // 3. Wait until download is 100% complete
+    if (torrent._laroVideoFiles && !torrent._laroVideoFiles.length) throw new Error('No matching video file found in torrent.');
     if (!torrent.done) {
       await this.waitForDone(torrent);
     }
 
     // 4. Find video files and select the largest one
-    const videoFiles = torrent.files.filter((file) => this.isVideoFile(file.name));
+    const videoFiles = torrent._laroVideoFiles || torrent.files.filter((file) => this.isVideoFile(file.name));
 
     if (videoFiles.length === 0) {
       throw new Error('No video files found in the downloaded torrent.');
@@ -359,7 +365,7 @@ export class TorrentHelper {
       };
     }
 
-    const targetOutput = options.outputPath || path.join(downloadDir, `converted_${path.parse(mainVideoFile.name).name}.mp4`);
+    const targetOutput = options.outputPath || path.join(downloadDir, `converted_${torrent.infoHash}_${path.parse(mainVideoFile.name).name}.mp4`);
 
     // 6. Smart conversion (probes codecs and transcodes only if required)
     const convertedPath = await this.convertAUTO(
@@ -397,7 +403,7 @@ export class TorrentHelper {
     // Measure progress over the video files only. torrent.progress includes
     // deselected junk files (samples, NFOs) that never download, which made
     // the UI stall just below 100%.
-    const videoFiles = (torrent.files || []).filter((file) => this.isVideoFile(file.name));
+    const videoFiles = torrent._laroVideoFiles || (torrent.files || []).filter((file) => this.isVideoFile(file.name));
     const files = videoFiles.length > 0 ? videoFiles : (torrent.files || []);
 
     let progress = torrent.progress * 100;
@@ -462,7 +468,7 @@ export class TorrentHelper {
     }
 
     torrent.files.forEach((file) => {
-      if (this.isVideoFile(file.name)) {
+      if ((torrent._laroVideoFiles || torrent.files).includes(file) && this.isVideoFile(file.name)) {
         file.select();
       }
     });

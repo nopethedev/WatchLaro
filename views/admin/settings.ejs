@@ -1,30 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
-    <link rel="stylesheet" href="../themes/darkTheme/theme.css">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laro - Admin Settings</title>
-
-</head>
-
-<body>
-    <div class="flex flex-col min-h-screen">
-        <%- include('../header.ejs') %>
-
-            <div class="flex flex-1">
-                <%- include('sidebar.ejs') %>
-                    <div class="flex-1 bg-slate-950">
-                        <h1
-                            class="text-4xl font-black bg-linear-to-b from-brand to-cyan-300 bg-clip-text text-transparent">
-                            Welcome
-                            to Laro</h1>
-                    </div>
-            </div>
-    </div>
-
-</body>
-
-</html>
+<%- include('layoutStart', { title:'Server settings', active:'settings' }) %>
+<div class="page-heading"><div><div class="eyebrow">INSTANCE CONFIGURATION</div><h1>Server settings</h1><p>Keep your download queue and self-hosted instance running smoothly.</p></div></div>
+<div class="two-col"><section class="panel"><div class="panel-head"><h2>Download preferences</h2><span class="badge">Persistent</span></div><div class="panel-body" x-data='adminSettings(<%- JSON.stringify({ pauseQueue:settings.pauseQueue,defaultQuality:settings.defaultQuality }) %>)'><p class="notice error" role="alert" x-show="error" x-cloak x-text="error"></p><p class="notice success" role="status" x-show="message" x-cloak x-text="message"></p><form @submit.prevent="save()"><fieldset :disabled="busy || <%= rank !== 'admin' %>"><div class="stack"><label class="form-label">Default download quality<select x-model="form.defaultQuality"><option>720p</option><option>1080p</option><option>2160p</option></select><small>Used as the starting quality when adding media.</small></label><label class="episode-row"><input type="checkbox" x-model="form.pauseQueue"><span class="episode-title">Pause new queue jobs<small>The current download finishes. Waiting jobs stay queued until you unpause.</small></span></label></div><div class="form-actions"><button class="btn primary" :disabled="busy" x-text="busy?'Saving…':'Save preferences'"></button></div></fieldset></form><% if(rank !== 'admin'){ %><p class="note">Only administrators can change server preferences.</p><% } %></div></section>
+<section class="panel"><div class="panel-head"><h2>Instance details</h2></div><div class="panel-body"><div class="setting-row"><span>Database engine</span><strong><%= settings.dialect %></strong></div><div class="setting-row"><span>Node.js runtime</span><strong><%= settings.node %></strong></div><div class="setting-row"><span>Title metadata</span><strong><%= settings.tmdbConfigured ? 'TMDB configured' : 'TMDB_KEY missing' %></strong></div><div class="setting-row"><span>Download directory</span><strong><%= settings.downloadsDir %></strong></div><div class="setting-row"><span>Available storage</span><strong><%= (settings.disk.free/1024**3).toFixed(1) %> GB of <%= (settings.disk.size/1024**3).toFixed(1) %> GB</strong></div><div class="setting-row"><span>Concurrent downloads</span><strong>1 · sequential queue</strong></div></div></section></div>
+<section class="panel"><div class="panel-head"><h2>How this instance works</h2></div><div class="panel-body"><div class="form-grid"><div><h3>Local-first playback</h3><p class="note">Finished downloads are served directly from your library. If a file is missing, playback falls back to on-demand streaming.</p></div><div><h3>Server configuration</h3><p class="note">Database credentials, port and TMDB credentials remain in your server's .env file. Change those on the host and restart the server. Secrets are never displayed here.</p></div><div><h3>Sharing & access</h3><p class="note">Share links are public to anyone who has the link. Revoke a link from the media library to remove access.</p></div><div><h3>Queue recovery</h3><p class="note">Interrupted downloads and conversions rejoin the queue after restart. Paused downloads remain paused until you resume them.</p></div></div></div></section>
+<%- include('layoutEnd') %>

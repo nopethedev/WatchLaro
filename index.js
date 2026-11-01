@@ -21,9 +21,11 @@ import { profile } from "console";
 import createAdminAccount from "./handlers/createAdminAccount.js";
 import routes from "./routes/index.js";
 import tmdb from "./handlers/downloader/tmdb.js";
+import { resumeDownloads } from "./routes/admin/media.js";
 
 //Init Database First
 await initDB();
+await resumeDownloads();
 
 //check admin
 await createAdminAccount();

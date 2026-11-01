@@ -2,7 +2,13 @@ node_modules
 .env
 downloads/*
 .freebuff/project-id
+.freebuff
+.cloud-attachments
 
 # local sqlite databases
 *.sqlite
 *.sqlite-journal
+
+# per-instance admin preferences
+database/admin-settings.json
+database/admin-settings.json.tmp
