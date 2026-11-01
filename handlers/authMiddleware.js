@@ -10,7 +10,7 @@ async function authorize(req, res, next, ranks) {
             return next();
         }
         if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'You do not have permission to perform this action.' });
-        return res.status(403).render('accessDenied.ejs');
+        return res.status(403).render('accessdenied.ejs');
     } catch (err) { next(err); }
 }
 const checkSession = (req, res, next) => authorize(req, res, next);

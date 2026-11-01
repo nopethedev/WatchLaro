@@ -133,8 +133,17 @@ async function startTorrentDownload(dbFile) {
 // Serial jobs avoid duplicate WebTorrent instances for season packs and bound CPU/disk work.
 const queue = [];
 let running = false;
+
+// Forget a pending job, e.g. when its media row was deleted. Jobs that are
+// already running are stopped through the torrent client instead.
+export function dequeue(uuid) {
+  for (let i = queue.length - 1; i >= 0; i--) {
+    if (queue[i].uuid === uuid) queue.splice(i, 1);
+  }
+}
+
 function enqueue(file) {
-  queue.push(file);
+  if (!queue.some(item => item.uuid === file.uuid)) queue.push(file);
   void drainQueue().catch(err => console.error('[queue]', err.message));
 }
 export async function drainQueue() {
@@ -142,12 +151,13 @@ export async function drainQueue() {
   running = true;
   try {
     while (queue.length && !getAdminSettings().pauseQueue) {
-      const file = queue.shift();
-      try { await file.reload(); } catch (err) {
-        if (err.name === 'SequelizeInstanceError') continue;
-        throw err;
-      }
-      if (file.status !== 'downloading') continue;
+      const pending = queue.shift();
+      // Re-read the row instead of reloading the queued instance: a deleted
+      // row must be skipped without aborting every job behind it.
+      let file;
+      try { file = await Files.findByPk(pending.id); }
+      catch (err) { console.error('[queue]', err.message); queue.unshift(pending); break; }
+      if (!file || file.status !== 'downloading') continue;
       try { await startTorrentDownload(file); }
       catch (err) { console.error('[queue]', err.message); }
     }
@@ -229,6 +239,10 @@ app.delete("/api/admin/files/:uuid", authMiddleware.checkManager, async (req, re
     if (!file) {
       return res.status(404).json({ success: false, error: "File not found" });
     }
+
+    // Drop it from the pending queue first so a deleted job can never start
+    // downloading after the media row is gone.
+    dequeue(file.uuid);
 
     // Stop the torrent (and drop its data from disk) if it is still active
     if (file.status === "transcoding") return res.status(409).json({ error: "Wait for conversion to finish before deleting this file" });

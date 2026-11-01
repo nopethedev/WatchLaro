@@ -168,6 +168,11 @@
                                 <i class="fa-solid fa-circle-user"></i>
                                 <%= username %>
                             </a>
+                            <% if (rank=="admin" || rank=="manager"){ %>
+                                <a href="/admin" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                                    <i class="fa-solid fa-key"></i>Admin Panel
+                                </a>
+                                <% } %>
                             <a href="#" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
                                 <i class="fa-solid fa-folder-open"></i>My stuff
                             </a>
