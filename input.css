@@ -149,3 +149,630 @@
 .admin-panel dialog h2 { @apply mb-5 text-xl font-bold; }
 .admin-panel [x-cloak] { @apply hidden; }
 }
+
+/* --------------------------------------------------------------------------
+   TV UI (10-foot interface)
+   Kept in this stylesheet so every page loads one CSS file.
+   -------------------------------------------------------------------------- */
+
+@theme {
+    --color-brand: #1d4ed8;
+    --color-tv-bg: #0a0a0f;
+    --color-tv-panel: #16161d;
+    --color-tv-text: #f6f6f9;
+    --color-tv-muted: #9c9caa;
+    --color-tv-accent: #3b82f6;
+    --color-tv-accent-strong: #2563eb;
+    --font-tv: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+    :root {
+        --tv-pad: 4.5rem;
+        --tv-nav-h: 5.5rem;
+        --tv-radius: .45rem;
+        --tv-card-w: 12.2rem;
+        --tv-card-h: 18.3rem;
+    }
+
+    html.tv-html {
+        font-size: clamp(15px, 1vw, 21px);
+        scrollbar-width: none;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    html.tv-html::-webkit-scrollbar {
+        display: none;
+    }
+
+    body.tv-body {
+        @apply m-0 min-h-screen overflow-x-hidden bg-tv-bg font-tv text-base leading-[1.4] text-tv-text antialiased;
+        animation: tv-fade-in .35s ease both;
+    }
+
+    body.tv-body img {
+        @apply block max-w-full;
+    }
+
+    [hidden] {
+        display: none !important;
+    }
+
+    [data-tv-item] {
+        scroll-margin-block: calc(var(--tv-nav-h) + 1rem) 1rem;
+    }
+
+    html.tv-html ::selection {
+        @apply bg-tv-accent text-white;
+    }
+}
+
+@layer components {
+    /* ---------------------------------------------------------------- *
+     * Top navigation
+     * ---------------------------------------------------------------- */
+
+    .tv-nav {
+        @apply fixed inset-x-0 top-0 z-[90] flex h-[var(--tv-nav-h)] items-center gap-[2.6rem] px-[var(--tv-pad)];
+        background: linear-gradient(to bottom, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, .55) 55%, transparent 100%);
+    }
+
+    .tv-logo {
+        @apply inline-flex items-baseline whitespace-nowrap text-[1.65rem] font-black leading-none tracking-[-.045em] no-underline;
+    }
+
+    .tv-logo-watch { @apply text-white; }
+    .tv-logo-laro { @apply text-tv-accent; }
+
+    .tv-nav-tabs { @apply flex items-center gap-[.35rem]; }
+
+    .tv-nav-tab {
+        @apply inline-flex items-center gap-[.55rem] rounded-lg border-2 border-transparent px-[1.1rem] py-[.55rem] text-[.98rem] font-semibold whitespace-nowrap text-[#c6c6d2] no-underline transition-[background-color,color,scale] duration-[160ms] ease-in-out;
+    }
+
+    .tv-nav-tab i { @apply text-[.95em] opacity-85; }
+    .tv-nav-tab.is-active { @apply bg-white/10 text-white; }
+
+    .tv-nav-tab:focus {
+        @apply scale-[1.02] bg-white text-tv-bg outline-none;
+    }
+
+    .tv-nav-tab:focus i { @apply opacity-100; }
+
+    .tv-nav-right { @apply ml-auto flex items-center gap-[1.4rem]; }
+
+    .tv-nav-clock {
+        @apply text-[.9rem] tracking-[.04em] text-[#8f8f9f];
+        font-variant-numeric: tabular-nums;
+    }
+
+    .tv-nav-profile {
+        @apply inline-flex rounded-[.55rem] border-2 border-transparent p-[.2rem] no-underline transition-[border-color,scale] duration-[160ms] ease-in-out;
+    }
+
+    .tv-nav-profile:focus {
+        @apply scale-[1.06] border-white outline-none;
+    }
+
+    .tv-avatar {
+        @apply grid size-[2.15rem] place-items-center rounded-[.45rem] text-[.95rem] text-[#dbe7ff];
+        background: linear-gradient(150deg, #35507e, #171a24);
+    }
+
+    /* ---------------------------------------------------------------- *
+     * Buttons
+     * ---------------------------------------------------------------- */
+
+    .tv-btn {
+        @apply inline-flex cursor-pointer items-center gap-[.65rem] rounded-[var(--tv-radius)] border-2 border-transparent px-[1.85rem] py-[.82rem] text-base font-bold leading-none no-underline transition-[background-color,scale,box-shadow] duration-[160ms] ease-in-out;
+        font-family: inherit;
+    }
+
+    .tv-btn-primary { @apply bg-white text-black; }
+    .tv-btn-ghost { @apply bg-[#484856]/70 text-white; }
+
+    .tv-btn:focus {
+        @apply scale-[1.04] outline-[3px] outline-offset-[3px] outline-white;
+        box-shadow: 0 0 2.4rem rgba(255, 255, 255, .22);
+    }
+
+    .tv-btn-ghost:focus { @apply bg-[#747488]/85; }
+    .tv-btn:disabled { @apply cursor-not-allowed opacity-50; }
+
+    /* ---------------------------------------------------------------- *
+     * Hero billboard
+     * ---------------------------------------------------------------- */
+
+    .tv-hero {
+        @apply relative flex min-h-[82vh] items-end overflow-hidden px-[var(--tv-pad)] pb-[5.5rem];
+        padding-top: calc(var(--tv-nav-h) + 2rem);
+    }
+
+    .tv-hero-media,
+    .tv-info-media { @apply absolute inset-0 bg-[#101018]; }
+
+    .tv-hero-media img,
+    .tv-info-media img {
+        @apply h-full w-full object-cover;
+        object-position: center 25%;
+    }
+
+    .tv-hero-fade,
+    .tv-info-fade {
+        @apply absolute inset-0;
+        background:
+            linear-gradient(to right, rgba(8, 8, 12, .97) 0%, rgba(8, 8, 12, .74) 36%, rgba(8, 8, 12, .12) 68%, rgba(8, 8, 12, .4) 100%),
+            linear-gradient(to top, var(--color-tv-bg) 1%, rgba(8, 8, 12, .55) 24%, transparent 58%),
+            linear-gradient(to bottom, rgba(8, 8, 12, .8), transparent 24%);
+    }
+
+    .tv-hero-content { @apply relative z-[2] max-w-[40rem]; }
+
+    .tv-hero-video {
+        @apply pointer-events-none absolute inset-0 h-full w-full border-0 bg-black opacity-0 transition-opacity duration-700 ease-in-out;
+    }
+
+    .tv-hero-video.is-ready { @apply opacity-100; }
+
+    .tv-hero-kicker {
+        @apply mb-[.9rem] flex items-center gap-[.7rem] text-[.78rem] font-bold uppercase tracking-[.22em] text-[#d2d8e6];
+    }
+
+    .tv-hero-kicker::before {
+        content: "";
+        @apply block h-[1.1rem] w-[.22rem] rounded-[1px] bg-tv-accent;
+    }
+
+    .tv-hero-title {
+        @apply mb-[1rem] mt-0 font-black leading-[.96] tracking-[-.035em];
+        font-size: clamp(2.8rem, 5vw, 4.6rem);
+        text-shadow: 0 .3rem 1.5rem rgba(0, 0, 0, .55);
+    }
+
+    .tv-hero-meta,
+    .tv-info-meta {
+        @apply mb-[1.1rem] flex flex-wrap items-center gap-x-[.95rem] gap-y-[.45rem] text-base font-medium text-[#d5d5df];
+    }
+
+    .tv-match { @apply font-bold text-[#46d369]; }
+    .tv-dot { @apply text-[#7d7d90]; }
+
+    .tv-chip {
+        @apply rounded-[.18rem] border border-white/40 px-[.42rem] py-[.1rem] text-[.72rem] font-bold uppercase tracking-[.06em] text-[#e4e4ec];
+    }
+
+    .tv-hero-overview {
+        @apply mt-0 line-clamp-3 max-w-[36rem] text-[1.04rem] leading-[1.55] text-[#e4e4ec];
+        text-shadow: 0 .15rem .8rem rgba(0, 0, 0, .5);
+    }
+
+    .tv-hero-actions,
+    .tv-info-actions { @apply mt-[1.7rem] flex flex-wrap gap-[.9rem]; }
+
+    /* ---------------------------------------------------------------- *
+     * Rows and cards
+     * ---------------------------------------------------------------- */
+
+    .tv-main { @apply min-h-screen; }
+
+    .tv-rows {
+        @apply relative z-[5] -mt-[4rem] flex flex-col gap-[1.2rem] pb-[4.5rem];
+    }
+
+    .tv-row-title {
+        @apply mb-[.45rem] mt-0 px-[var(--tv-pad)] font-bold tracking-[-.01em] text-[#ececf2];
+        font-size: clamp(1.1rem, 1.35vw, 1.5rem);
+    }
+
+    .tv-row-track {
+        @apply flex gap-[.75rem] overflow-x-auto overflow-y-hidden px-[var(--tv-pad)] pb-[.85rem] pt-[.55rem];
+        overscroll-behavior-x: contain;
+        scroll-padding-inline: var(--tv-pad);
+        scrollbar-width: none;
+    }
+
+    .tv-row-track::-webkit-scrollbar { display: none; }
+
+    .tv-card {
+        @apply relative z-[1] w-[var(--tv-card-w)] flex-none cursor-pointer border-0 bg-transparent p-0 text-left outline-none transition-transform duration-150 ease-in-out;
+        color: inherit;
+        font-family: inherit;
+    }
+
+    .tv-card-media {
+        @apply relative block h-[var(--tv-card-h)] w-full overflow-hidden rounded-[.4rem] bg-[#1b1b23];
+        box-shadow: 0 .4rem 1.1rem rgba(0, 0, 0, .45);
+    }
+
+    .tv-card-poster,
+    .tv-card-backdrop {
+        @apply absolute inset-0 h-full w-full object-cover transition-opacity duration-[250ms] ease-in-out;
+    }
+
+    .tv-card-backdrop { @apply opacity-0; }
+
+    .tv-card-info {
+        @apply absolute inset-x-0 bottom-0 z-[2] hidden flex-col gap-[.25rem] px-[.7rem] pb-[.6rem] pt-[1.2rem] text-left;
+        background: linear-gradient(to top, rgba(0, 0, 0, .95) 8%, rgba(0, 0, 0, .55) 55%, transparent);
+    }
+
+    .tv-card-info-kicker {
+        @apply text-[.55rem] font-bold uppercase tracking-[.17em] text-[#cbd5e8];
+    }
+
+    .tv-card-info-title {
+        @apply text-[1.08rem] font-extrabold leading-[1.08] tracking-[-.02em] text-white;
+    }
+
+    .tv-card-info-meta { @apply text-[.7rem] text-[#d5d5df]; }
+
+    .tv-card-title {
+        @apply mt-[.5rem] block truncate text-[.9rem] font-semibold text-[#bcbcc9] transition-colors duration-[160ms] ease-in-out;
+    }
+
+    .tv-card:focus {
+        @apply z-[4] scale-[1.04] outline-none;
+    }
+
+    .tv-card:focus .tv-card-media {
+        @apply outline-[3px] outline-offset-[3px] outline-white;
+    }
+
+    /* The focused card keeps its layout width: the old width expansion made
+       rapid arrow presses fight the smooth scroller and visibly wobble. */
+    .tv-card.is-expanded { @apply z-[5]; }
+    .tv-card.is-expanded .tv-card-info { @apply flex; }
+    .tv-card.is-expanded .tv-card-title { @apply hidden; }
+
+    .tv-card.is-expanded.has-backdrop .tv-card-poster { @apply opacity-0; }
+    .tv-card.is-expanded.has-backdrop .tv-card-backdrop { @apply opacity-100; }
+
+    .tv-card-media .tv-hero-video { @apply z-[1]; }
+
+    .tv-episode-card { @apply w-[19rem]; }
+
+    .tv-episode-card img {
+        @apply aspect-video w-full rounded-[.4rem] bg-[#1b1b23] object-cover;
+        box-shadow: 0 .4rem 1.1rem rgba(0, 0, 0, .45);
+    }
+
+    .tv-episode-card:focus { @apply scale-[1.03]; }
+    .tv-episode-card:focus img { @apply outline-[3px] outline-offset-[3px] outline-white; }
+    .tv-card:focus .tv-card-title { @apply text-white; }
+
+    .tv-row-focus {
+        @apply hidden max-w-[74rem] px-[var(--tv-pad)] pb-[.1rem] pt-[.85rem];
+    }
+
+    .tv-row-focus.is-visible {
+        @apply block;
+        animation: tv-fade-in .22s ease both;
+    }
+
+    .tv-row-focus-meta { @apply text-[.95rem] font-semibold text-[#d6d6e1]; }
+
+    .tv-row-focus-overview {
+        @apply mt-[.45rem] line-clamp-3 text-[.95rem] leading-[1.5] text-[#b6b6c4];
+    }
+
+    .tv-row-focus-overview:empty { @apply hidden; }
+
+    .tv-empty,
+    .tv-status {
+        @apply mx-0 mt-[.4rem] px-[var(--tv-pad)] text-[1.05rem] text-tv-muted;
+    }
+
+    .tv-skeleton-row {
+        @apply flex gap-[.75rem] overflow-hidden px-[var(--tv-pad)] pb-[.85rem] pt-[.55rem];
+    }
+
+    .tv-skeleton-card {
+        @apply aspect-[2/3] w-[var(--tv-card-w)] flex-none rounded-[.4rem];
+        background: linear-gradient(100deg, #15151c 30%, #20202a 50%, #15151c 70%);
+        background-size: 220% 100%;
+        animation: tv-shimmer 1.5s linear infinite;
+    }
+
+    /* ---------------------------------------------------------------- *
+     * Profile selector
+     * ---------------------------------------------------------------- */
+
+    .tv-profiles-bg {
+        @apply fixed inset-0 bg-[#101018] bg-cover opacity-55;
+        background-position: center 30%;
+    }
+
+    .tv-profiles-shade {
+        @apply fixed inset-0;
+        background:
+            radial-gradient(120% 90% at 50% 42%, rgba(10, 10, 15, .35), rgba(10, 10, 15, .96) 76%),
+            linear-gradient(to top, #0a0a0f 2%, transparent 55%);
+    }
+
+    .tv-profiles {
+        @apply relative z-[2] flex min-h-screen flex-col items-center justify-center gap-[2.2rem] px-8 py-20 text-center;
+    }
+
+    .tv-profiles-logo {
+        @apply text-[1.9rem] font-black leading-none tracking-[-.045em] no-underline;
+    }
+
+    .tv-profiles-title {
+        @apply m-0 font-extrabold tracking-[-.02em];
+        font-size: clamp(2rem, 3.4vw, 3rem);
+    }
+
+    .tv-profiles-row { @apply flex gap-[2.2rem]; }
+
+    .tv-profile {
+        @apply flex cursor-pointer flex-col items-center gap-[.95rem] border-0 bg-transparent p-0 text-[#b8b8c6] no-underline;
+        font-family: inherit;
+    }
+
+    .tv-profile-tile {
+        @apply grid size-[11rem] place-items-center rounded-2xl border-[3px] border-transparent text-[3.4rem] text-[#d3e3ff] transition-[scale,border-color,box-shadow] duration-[160ms] ease-in-out;
+        background: linear-gradient(150deg, #2b3d5c, #12141b);
+    }
+
+    .tv-profile-name { @apply text-[1.2rem] font-semibold transition-colors duration-[160ms]; }
+    .tv-profile:focus { @apply outline-none; }
+
+    .tv-profile:focus .tv-profile-tile {
+        @apply scale-[1.05] border-white;
+        box-shadow: 0 0 0 .35rem rgba(255, 255, 255, .14), 0 1.6rem 3rem rgba(0, 0, 0, .6);
+    }
+
+    .tv-profile:focus .tv-profile-name { @apply text-white; }
+    .tv-profiles-hint { @apply m-0 text-[.95rem] text-[#8b8b9c]; }
+    .tv-profiles-actions { @apply flex justify-center; }
+
+    .tv-exit {
+        @apply rounded-[.4rem] border-2 border-transparent px-[1.1rem] py-[.6rem] text-[.95rem] text-[#9aa0b4] no-underline transition-[color,background-color,border-color] duration-[160ms] ease-in-out;
+    }
+
+    .tv-exit:focus { @apply border-white bg-white/10 text-white outline-none; }
+
+    /* ---------------------------------------------------------------- *
+     * Search: on-screen keyboard + suggestions + results
+     * ---------------------------------------------------------------- */
+
+    .tv-search-layout {
+        @apply grid min-h-screen items-start gap-[3.2rem] px-[var(--tv-pad)] pb-16;
+        grid-template-columns: 21rem minmax(0, 1fr);
+        padding-top: calc(var(--tv-nav-h) + 2rem);
+    }
+
+    .tv-search-rail {
+        @apply sticky flex flex-col gap-[1.15rem];
+        top: calc(var(--tv-nav-h) + .5rem);
+    }
+
+    .tv-search-query {
+        @apply mb-[.1rem] mt-0 overflow-hidden text-[.82rem] font-bold uppercase tracking-[.12em] text-[#9fb4dc] text-ellipsis whitespace-nowrap;
+    }
+
+    .tv-search-query[hidden] { @apply hidden; }
+
+    .tv-key.tv-key-back {
+        @apply flex h-auto min-h-[2.9rem] flex-none items-center justify-center gap-[.55rem] rounded-[.45rem] border-2 border-white/20 bg-white/5 px-4 py-[.8rem] text-[.98rem] font-semibold normal-case text-[#e7e7ef] no-underline whitespace-nowrap;
+    }
+
+    .tv-key-back:focus { @apply scale-[1.02] border-white bg-white text-black outline-none; }
+
+    .tv-keyboard { @apply flex flex-col gap-[.38rem]; }
+    .tv-key-row { @apply flex gap-[.38rem]; }
+
+    .tv-key {
+        @apply grid h-[2.85rem] min-w-0 flex-1 basis-0 place-items-center rounded-[.35rem] border-2 border-transparent bg-white/[.075] text-[1.1rem] font-semibold lowercase text-[#ececf2] transition-[background-color,color,scale] duration-[140ms] ease-in-out;
+        font-family: inherit;
+        cursor: pointer;
+    }
+
+    .tv-key:focus { @apply scale-[1.07] bg-white text-black outline-none; }
+    .tv-key-action { @apply text-[.9rem] normal-case; }
+    .tv-key-space { @apply flex-[3_1_0] normal-case; }
+
+    .tv-search-rail-title { @apply mt-2 text-base font-bold text-[#d9d9e3]; }
+
+    .tv-suggestions { @apply flex flex-col items-start gap-[.1rem]; }
+
+    .tv-suggestion {
+        @apply -ml-2 cursor-pointer rounded-[.35rem] border-2 border-transparent bg-transparent px-2 py-[.32rem] text-left text-base text-[#a9a9ba] transition-[color,background-color,border-color] duration-[140ms] ease-in-out;
+        font-family: inherit;
+    }
+
+    .tv-suggestion:focus { @apply border-white/55 bg-white/10 text-white outline-none; }
+
+    .tv-search-results { @apply min-w-0; }
+
+    .tv-query {
+        @apply mb-[1.4rem] flex items-center gap-4 border-b-2 border-white/15 px-0 py-[.35rem];
+    }
+
+    .tv-query > i { @apply text-[1.15rem] text-[#9a9aab]; }
+
+    .tv-query input {
+        @apply min-w-0 flex-1 border-0 bg-transparent px-0 py-1 font-bold text-white outline-none;
+        font-family: inherit;
+        font-size: clamp(1.4rem, 2vw, 1.9rem);
+    }
+
+    .tv-query input::placeholder { @apply font-medium text-[#6f6f83]; }
+    .tv-query:focus-within { @apply border-white; }
+    .tv-search-results .tv-status { @apply mb-2 mt-0 px-0; }
+
+    .tv-result-grid-inner {
+        @apply grid gap-x-[.9rem] gap-y-[1.3rem];
+        grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    }
+
+    .tv-result-grid-inner .tv-card { @apply w-full; }
+    .tv-result-grid-inner .tv-card-media { @apply h-auto aspect-[2/3]; }
+
+    .tv-grid-title { @apply mb-[.65rem] mt-0 text-[1.2rem] font-bold text-[#e8e8f0]; }
+
+    /* ---------------------------------------------------------------- *
+     * Info / details
+     * ---------------------------------------------------------------- */
+
+    .tv-info-hero {
+        @apply relative flex min-h-[76vh] items-end overflow-hidden px-[var(--tv-pad)] pb-[3.6rem];
+        padding-top: calc(var(--tv-nav-h) + 2.5rem);
+    }
+
+    .tv-info-content { @apply relative z-[2] max-w-[46rem]; }
+
+    .tv-info-title {
+        @apply mb-[.9rem] mt-0 font-black leading-[1.02] tracking-[-.03em];
+        font-size: clamp(2.3rem, 4.2vw, 3.9rem);
+        text-shadow: 0 .3rem 1.4rem rgba(0, 0, 0, .6);
+    }
+
+    .tv-info-overview {
+        @apply m-0 line-clamp-5 max-w-[42rem] text-[1.03rem] leading-[1.6] text-[#e3e3ec];
+    }
+
+    .tv-episodes { @apply relative z-[3] pb-16 pt-[.6rem]; }
+    .tv-episodes[hidden] { @apply hidden; }
+    .tv-episodes .tv-row-title:not(:first-child) { @apply mt-[1.2rem]; }
+
+    .tv-episode-card { @apply w-[19rem]; }
+
+    .tv-ep-number {
+        @apply mb-[.1rem] mt-[.55rem] block text-[.74rem] font-bold uppercase tracking-[.14em] text-[#9393a5];
+    }
+
+    .tv-episode-card:focus .tv-ep-number { @apply text-[#d6dcf0]; }
+
+    .tv-pill {
+        @apply flex-none cursor-pointer rounded-[.45rem] border-2 border-transparent bg-white/[.08] px-[1.15rem] py-[.55rem] text-[.94rem] font-semibold text-[#d0d0dd] transition-[background-color,border-color,color] duration-[160ms] ease-in-out;
+        font-family: inherit;
+    }
+
+    .tv-pill.is-active { @apply bg-white/[.17] text-white; }
+    .tv-pill:focus { @apply border-white bg-white/[.22] text-white outline-none; }
+
+    /* ---------------------------------------------------------------- *
+     * Watch (player iframe)
+     * ---------------------------------------------------------------- */
+
+    body.tv-watch { @apply overflow-hidden bg-black; }
+
+    .tv-watch iframe {
+        @apply fixed inset-0 h-full w-full border-0 bg-black;
+    }
+}
+
+@keyframes tv-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes tv-shimmer {
+    to { background-position: -220% 0; }
+}
+
+@media (max-width: 1100px) {
+    :root {
+        --tv-pad: 2.4rem;
+        --tv-card-w: 10rem;
+        --tv-card-h: 15rem;
+    }
+
+    .tv-nav { @apply gap-[1.4rem]; }
+    .tv-nav-clock { @apply hidden; }
+    .tv-hero-title { font-size: clamp(2.2rem, 6vw, 3.2rem); }
+    .tv-hero-overview { @apply line-clamp-2; }
+    .tv-profile-tile { @apply size-[8.5rem] text-[2.6rem]; }
+    .tv-episode-card { @apply w-[16rem]; }
+
+    .tv-search-layout {
+        grid-template-columns: 17rem minmax(0, 1fr);
+        @apply gap-8;
+    }
+
+    .tv-key { @apply h-[2.4rem] text-[.95rem]; }
+
+    .tv-result-grid-inner {
+        grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    :root {
+        --tv-pad: 1.15rem;
+        --tv-nav-h: 4.5rem;
+        --tv-card-w: 8.9rem;
+        --tv-card-h: 13.35rem;
+    }
+
+    .tv-nav { @apply gap-3; }
+    .tv-logo { @apply text-[1.25rem]; }
+    .tv-nav-tabs { @apply gap-0; }
+    .tv-nav-tab { @apply gap-[.35rem] px-[.55rem] py-[.45rem] text-[.72rem]; }
+    .tv-nav-tab span { @apply hidden; }
+    .tv-nav-right { @apply gap-2; }
+    .tv-nav-profile { @apply p-0; }
+    .tv-avatar { @apply size-[1.85rem]; }
+
+    .tv-hero { @apply min-h-[74vh] pb-12; }
+    .tv-hero-title { font-size: clamp(2rem, 9vw, 3rem); }
+    .tv-hero-kicker { @apply text-[.62rem] tracking-[.16em]; }
+    .tv-hero-overview { @apply text-[.88rem]; }
+    .tv-btn { @apply gap-2 px-4 py-[.68rem] text-[.82rem]; }
+    .tv-hero-actions, .tv-info-actions { @apply mt-4 gap-[.55rem]; }
+    .tv-rows { @apply -mt-8 gap-2 pb-8; }
+    .tv-row-title { @apply mb-1 text-base; }
+    .tv-card-info-kicker { @apply hidden; }
+    .tv-card-info-title { @apply text-[.9rem]; }
+    .tv-card-info-meta { @apply text-[.6rem]; }
+    .tv-row-focus { @apply pt-1; }
+    .tv-row-focus-meta { @apply text-[.72rem]; }
+    .tv-row-focus-overview { @apply text-[.72rem]; line-clamp: 2; -webkit-line-clamp: 2; }
+    .tv-profiles { @apply gap-6 px-4 py-10; }
+    .tv-profiles-title { font-size: 1.8rem; }
+    .tv-profiles-row { @apply gap-4; }
+    .tv-profile-tile { @apply size-[6.5rem] text-[2rem]; }
+    .tv-profile-name { @apply text-base; }
+    .tv-profile:focus .tv-profile-tile { @apply scale-[1.03]; }
+    .tv-profiles-hint { @apply text-[.78rem]; }
+    .tv-exit { @apply text-[.78rem]; }
+    .tv-search-layout {
+        @apply block gap-0 px-[var(--tv-pad)] pb-24;
+        padding-top: calc(var(--tv-nav-h) + 1rem);
+    }
+    .tv-search-rail { @apply static; }
+    .tv-search-rail-title, .tv-suggestions { @apply hidden; }
+    .tv-key { @apply h-[2.3rem] text-[.9rem]; }
+    .tv-keyboard { @apply gap-[.28rem]; }
+    .tv-key-row { @apply gap-[.28rem]; }
+    .tv-key.tv-key-back { @apply min-h-[2.6rem] px-3 py-[.55rem] text-[.82rem]; }
+    .tv-query { @apply mb-3; }
+    .tv-query input { font-size: 1.3rem; }
+    .tv-result-grid-inner { grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); }
+    .tv-info-hero { @apply min-h-[68vh] pb-8; }
+    .tv-info-title { font-size: 2rem; }
+    .tv-info-overview { @apply line-clamp-4 text-[.88rem]; }
+    .tv-episodes { @apply pb-12; }
+    .tv-episode-card { @apply w-[13rem]; }
+}
+
+@media (min-width: 2400px) {
+    :root {
+        --tv-pad: 6rem;
+        --tv-nav-h: 6.5rem;
+        --tv-card-w: 13.5rem;
+        --tv-card-h: 20.25rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.tv-html,
+    html.tv-html *,
+    html.tv-html *::before,
+    html.tv-html *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

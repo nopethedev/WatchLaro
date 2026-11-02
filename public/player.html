@@ -396,6 +396,49 @@
             #wl-badge { font-size: 13px; }
         }
 
+        /* Phones keep the same TV controls, just compacted and reachable. */
+        @media (max-width: 760px) {
+            #wl-tv-top {
+                align-items: flex-start;
+                gap: .7rem;
+                padding: max(1rem, env(safe-area-inset-top)) 1rem 2.2rem;
+            }
+            .wl-tv-top-left { gap: .3rem; }
+            .wl-tv-icon-row { gap: .55rem; }
+            .wl-tv-icon { width: 2.65rem; height: 2.65rem; font-size: 1.2rem; }
+            .wl-tv-icon svg { width: 1.55rem; height: 1.55rem; }
+            #wl-tv-back svg { width: 1.8rem; height: 1.8rem; }
+            .wl-tv-label { display: none; }
+            #wl-tv-meta { max-width: 55%; padding-top: .3rem; gap: .15rem; }
+            #wl-tv-title { font-size: .95rem; line-height: 1.2; }
+            #wl-tv-sub { font-size: .75rem; }
+            #wl-tv-bottom { padding: 2.4rem .8rem calc(.95rem + env(safe-area-inset-bottom)); }
+            .wl-tv-progress { gap: .5rem; }
+            #wl-tv-play { width: 3rem; height: 3rem; font-size: 1rem; }
+            .wl-tv-time { font-size: .72rem; min-width: 2.4rem; }
+            #wl-tv-seek { height: 18px; }
+            #wl-tv-seek::-webkit-slider-runnable-track { height: 4px; }
+            #wl-tv-seek::-webkit-slider-thumb { width: 13px; height: 13px; margin-top: -4.5px; }
+            #wl-tv-seek::-moz-range-track,
+            #wl-tv-seek::-moz-range-progress { height: 4px; }
+            #wl-tv-seek::-moz-range-thumb { width: 13px; height: 13px; }
+            #wl-tv-pills {
+                justify-content: center;
+                flex-wrap: wrap;
+                gap: .4rem;
+                margin-top: .85rem;
+            }
+            .wl-tv-pill { flex: 0 0 auto; font-size: .7rem; padding: .35rem .65rem; }
+            #wl-tv-sheet { padding: .75rem; }
+            .wl-sheet-card { width: 100%; padding: 1.2rem 1.15rem 1rem; border-radius: .8rem; }
+            .wl-sheet-title { font-size: 1.25rem; }
+            .wl-sheet-status { font-size: .8rem; }
+            .wl-sheet-server { font-size: .8rem; padding: .4rem .8rem; }
+            .wl-sheet-hint { font-size: .72rem; }
+            .wl-sheet-close { font-size: .8rem; }
+            #wl-toast { bottom: 7.5rem; width: calc(100% - 2rem); }
+        }
+
         /* Ten-foot layout: scale the TV skin up on living-room sized screens. */
         @media (min-width: 1200px) {
             #wl-tv-top { padding: 3rem 4rem 5.5rem; }
@@ -485,7 +528,7 @@
             </div>
         </div>
 
-        <!-- TV skin controls (shown for player.html?tvui=1) -->
+        <!-- TV skin controls (default; add ?tvui=0 for the classic player) -->
         <div id="wl-tv-ui" hidden>
             <div id="wl-tv-top">
                 <div class="wl-tv-top-left">
@@ -523,6 +566,7 @@
 
                 <div id="wl-tv-pills">
                     <button id="wl-tv-subs" class="wl-tv-pill" type="button">Subtitles: Off</button>
+                    <button id="wl-tv-mute" class="wl-tv-pill" type="button" aria-label="Mute">Sound on</button>
                     <button id="wl-tv-options" class="wl-tv-pill" type="button">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" aria-hidden="true">

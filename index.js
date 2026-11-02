@@ -138,6 +138,7 @@ app.get('/movies/m', async (req, res) => {
     } catch { /* title stays empty, player still works on id alone */ }
     const embed = "/player.html?id=" + encodeURIComponent(q)
         + (title ? "&title=" + encodeURIComponent(title) : '')
+        + "&back=" + encodeURIComponent("/movies/search")
         + "&auto=1&embed=1";
     res.render('movies/m.ejs', { embed, title })
 });
@@ -167,6 +168,7 @@ app.get('/tv/:id/:season/:episode', async (req, res) => {
     const embed = "/player.html?id=" + encodeURIComponent(id)
         + "&season=" + encodeURIComponent(season) + "&episode=" + encodeURIComponent(episode)
         + (title ? "&title=" + encodeURIComponent(title) : '')
+        + "&back=" + encodeURIComponent(`/tv/${id}/${season}`)
         + "&auto=1&embed=1";
     res.render(path.join(__dirname, "views", "tv", "watch.ejs"), { embed, title })
 })

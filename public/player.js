@@ -14,6 +14,8 @@
  *   title    optional, shown in the top bar
  *   auto     optional, "1" to autoplay once ready
  *   embed    optional, "1" to keep the top bar visible (iframe default)
+ *   tvui     optional, "0" for the classic skin (the TV skin is default)
+ *   back     optional same-origin path for the player's back control
  *   api      optional, override the API base (default "/api")
  *
  * Endpoints it expects (all built from one helper at the top of the file, so
@@ -99,6 +101,7 @@
         tvSourceList: document.getElementById('wl-tv-source-list'),
         tvSheetClose: document.getElementById('wl-tv-sheet-close'),
         tvSubs: document.getElementById('wl-tv-subs'),
+        tvMute: document.getElementById('wl-tv-mute'),
         tvFull: document.getElementById('wl-tv-full'),
         tvBack: document.getElementById('wl-tv-back'),
         tvRewind: document.getElementById('wl-tv-rewind'),
@@ -106,7 +109,7 @@
         tvNext: document.getElementById('wl-tv-next')
     };
 
-    var params = { id: null, season: null, episode: null, title: '', episodeTitle: '' };
+    var params = { id: null, season: null, episode: null, title: '', episodeTitle: '', back: '' };
     var state = 'idle';           // idle | preparing | ready | error
     var pollTimer = null;
     var pollFailures = 0;
@@ -121,8 +124,9 @@
     var subtitleTracks = [];   // [{ name, lang }] from info.subtitles, attached at ready
     var subtitleIndex = -1;    // -1 = off, else index into subtitleTracks
 
-    // TV skin: ten-foot layout with remote focus, and the server switcher.
-    var TV_MODE = readFlag('tvui') === '1';
+    // The ten-foot layout is the default everywhere, with a responsive
+    // compact mode for phones. Use ?tvui=0 to fall back to the classic skin.
+    var TV_MODE = readFlag('tvui') !== '0';
     var SESSION = 'wl-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
     var switchingServer = false;
     var pendingResume = 0;      // seconds to seek to once metadata is known
@@ -413,6 +417,14 @@
         }
     }
 
+    function updateTvMuteLabel() {
+        if (!el.tvMute || !el.video) return;
+        var muted = !!el.video.muted || Number(el.video.volume) === 0;
+        el.tvMute.textContent = muted ? 'Sound off' : 'Sound on';
+        el.tvMute.classList.toggle('is-active', muted);
+        el.tvMute.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
+    }
+
     function updateSeekUI() {
         if (!el.video) return;
         var duration = el.video.duration;
@@ -444,6 +456,7 @@
             el.volume.style.setProperty('--fill', Math.round(level * 100) + '%');
         }
         if (el.mute) el.mute.classList.toggle('is-muted', !!el.video.muted);
+        updateTvMuteLabel();
     }
 
     /* ---------------- subtitles ---------------- */
@@ -868,7 +881,8 @@
             season: clean(next.season !== undefined ? next.season : p.season),
             episode: clean(next.episode !== undefined ? next.episode : p.episode),
             title: clean(next.title !== undefined ? next.title : p.title) || '',
-            episodeTitle: clean(next.episodeTitle !== undefined ? next.episodeTitle : p.episodeTitle) || ''
+            episodeTitle: clean(next.episodeTitle !== undefined ? next.episodeTitle : p.episodeTitle) || '',
+            back: clean(next.back !== undefined ? next.back : p.back) || ''
         };
         pendingResume = Number(clean(next.resume)) > 0 ? Number(clean(next.resume)) : 0;
 
@@ -963,7 +977,7 @@
         return [
             [el.tvBack, el.tvRewind, el.tvForward, el.tvNext],
             [el.tvPlay, el.tvSeek],
-            [el.tvSubs, el.tvOptions, el.tvFull]
+            [el.tvSubs, el.tvMute, el.tvOptions, el.tvFull]
         ].map(function (row) {
             return row.filter(Boolean);
         }).filter(function (row) { return row.length; });
@@ -1004,8 +1018,32 @@
         focusTv(nextRow[Math.min(colIndex, nextRow.length - 1)]);
     }
 
-    /** Inside the TV watch page this asks the parent to navigate back. */
+    /** Reject absolute or protocol-relative back targets from query strings. */
+    function safeBackPath(value) {
+        var candidate = clean(value);
+        if (!candidate) return '';
+        try {
+            var target = new URL(candidate, location.origin);
+            if (target.origin !== location.origin) return '';
+            return target.pathname + target.search + target.hash;
+        } catch (e) {
+            return '';
+        }
+    }
+
+    /**
+     * Go back without trapping the viewer inside an embed: a same-origin path
+     * supplied by the hosting route wins, then the TV parent message, then
+     * history. This makes the TV controls work on every player page.
+     */
     function tvGoBack() {
+        var target = safeBackPath(params.back);
+        if (target) {
+            try {
+                (window.top || window).location.href = target;
+                return;
+            } catch (e) { /* top is cross-origin */ }
+        }
         try {
             if (isEmbedded() && window.parent && window.parent !== window) {
                 window.parent.postMessage({ type: 'wl:back' }, location.origin);
@@ -1284,6 +1322,7 @@
         });
         if (el.tvPlay) el.tvPlay.addEventListener('click', togglePlay);
         if (el.tvFull) el.tvFull.addEventListener('click', toggleFullscreen);
+        if (el.tvMute) el.tvMute.addEventListener('click', toggleMute);
         if (el.tvSubs) el.tvSubs.addEventListener('click', cycleSubtitles);
         if (el.tvOptions) el.tvOptions.addEventListener('click', openTvSheet);
         if (el.tvSheetClose) el.tvSheetClose.addEventListener('click', closeTvSheet);
@@ -1312,8 +1351,14 @@
 
         setTvSubtitleLabel();
         setTvSourceLabel('Server 1', false);
+        updateTvMuteLabel();
         document.addEventListener('keydown', onTvKey, true);
-        window.setTimeout(function () { focusTv(el.tvPlay); }, 500);
+
+        // Phones are touch-first; auto-focusing a button would leave a focus
+        // ring on screen and steal the first tap. Remote/keyboard devices
+        // still start on the primary action.
+        var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        if (!coarse) window.setTimeout(function () { focusTv(el.tvPlay); }, 500);
     }
 
     /* ------------------------------------------------------------------ *
@@ -1508,7 +1553,7 @@
     });
 
     window.addEventListener('message', function (event) {
-        if (event.origin && event.origin !== location.origin) return;
+        if (event.origin !== location.origin) return;
         var data = event.data;
         if (!data || typeof data !== 'object') return;
 

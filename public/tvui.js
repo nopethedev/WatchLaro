@@ -120,7 +120,7 @@
         // fully visible instead of sliding under the fixed nav.
         if (item.closest && item.closest(".tv-hero, .tv-info-hero")) {
             try {
-                window.scrollTo({ top: 0, behavior: "smooth" });
+                window.scrollTo({ top: 0, behavior: "auto" });
             } catch (err) {
                 window.scrollTo(0, 0);
             }
@@ -132,7 +132,7 @@
         if (isFixedRow(item)) return;
 
         try {
-            item.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+            item.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
         } catch (err) {
             item.scrollIntoView(false);
         }
@@ -704,7 +704,11 @@
         if (node) node.textContent = text || "";
     }
 
+    var clockStarted = false;
+
     function startClock() {
+        if (clockStarted) return;
+        clockStarted = true;
         var node = document.getElementById("tv-clock");
         if (!node) return;
         var paint = function () {
@@ -918,14 +922,8 @@
                 panel.classList.add("is-visible");
             }
 
-            // The card just got much wider; keep it fully on screen.
-            window.setTimeout(function () {
-                if (activeCard !== card) return;
-                try {
-                    card.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
-                } catch (err) { /* older TV browsers */ }
-            }, 320);
-
+            // The focused card keeps its layout width now, so there is no
+            // delayed scroll animation to fight rapid arrow presses.
             var token = ++cardTrailerToken;
             window.setTimeout(function () {
                 if (token !== cardTrailerToken || activeCard !== card || !item) return;
@@ -1145,6 +1143,9 @@
 
         if (input) {
             input.addEventListener("input", function () {
+                // Invalidate a request that was started for the previous text
+                // before the debounce timer starts the next one.
+                requestToken++;
                 var query = input.value.trim();
                 window.clearTimeout(timer);
                 if (!query) {

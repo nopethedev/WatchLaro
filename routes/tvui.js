@@ -238,6 +238,9 @@ router.get("/tvui/watch", (req, res) => {
     embedParams.set("tvui", "1");
 
     const back = type === "tv" ? `/tvui/info/tv/${id}${season ? "?season=" + season : ""}` : `/tvui/info/movie/${id}`;
+    // The player also gets a direct same-origin back target, so its back
+    // control works when opened outside the TV watch wrapper.
+    embedParams.set("back", back);
     const displayTitle = isSeries
         ? `${title || "Episode"} S${season}E${episode}`
         : (title || "Watch");
