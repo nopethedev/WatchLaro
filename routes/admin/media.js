@@ -70,13 +70,27 @@ app.get("/api/admin/torrent/search", authMiddleware.checkManager, async (req, re
 
 // Runs the full download + conversion pipeline for a Files DB row.
 // Used by the create route and to resume downloads after a server restart.
-async function startTorrentDownload(dbFile) {
+async function startTorrentDownload(dbFile, state = null) {
   let currentStage = 'download';
+  const signal = state?.controller?.signal;
+  const downloadDir = path.join(downloadsDir, dbFile.uuid);
+  const cancelled = () => Boolean(state?.cancelled || signal?.aborted);
+
+  // Re-read the row instead of saving the captured instance: the media row may
+  // have been deleted while the pipeline was waiting for metadata or pieces.
+  const updateRow = async (values) => {
+    if (cancelled()) return false;
+    const row = await Files.findByPk(dbFile.id);
+    if (!row || row.status === 'failed') return false;
+    await row.update(values);
+    return true;
+  };
 
   return torrenter.downloadAndConvert(
     dbFile.magnet,
     {
-      downloadDir: path.join(downloadsDir, dbFile.uuid),
+      signal,
+      downloadDir,
       outputPath: path.join(downloadsDir, `${dbFile.uuid}.mp4`),
       selectVideo: dbFile.type === 'tv' ? (name) => {
         const match = /s(\d+)e(\d+)(?!\d)|\b(\d+)x(\d+)(?!\d)/i.exec(name);
@@ -84,12 +98,13 @@ async function startTorrentDownload(dbFile) {
       } : undefined,
       // Triggered 1-3 seconds after metadata arrives
       onReady: async ({ outputPath, videoFile, torrent }) => {
+        if (cancelled()) return;
         // Store the path relative to downloads/ so it stays short (and
         // resolvable); the column is only VARCHAR(100)
         const relPath = path.relative(downloadsDir, outputPath);
         const safePath = relPath.length <= 100 ? relPath : '/pending';
         console.log(outputPath)
-        await dbFile.update({
+        await updateRow({
           name: videoFile.name,
           path: safePath,
           torrentHash: torrent ? torrent.infoHash : dbFile.torrentHash
@@ -98,10 +113,12 @@ async function startTorrentDownload(dbFile) {
       }
     },
     async (progress) => {
+      if (cancelled()) return;
+
       // Update database status to 'transcoding' when FFmpeg starts
       if (progress.stage === 'convert' && currentStage !== 'convert') {
         currentStage = 'convert';
-        await dbFile.update({ status: "transcoding" });
+        await updateRow({ status: "transcoding" });
       }
 
       if (progress.stage === 'download') {
@@ -111,28 +128,38 @@ async function startTorrentDownload(dbFile) {
       }
     }
   ).then(async (result) => {
-    // Update status to 'done' when process finishes
+    // Update status to 'done' when process finishes, unless the media row was
+    // deleted (or cancelled) while the final pieces were being written.
     const finalPath = result.outputPath || result.inputPath;
     const relPath = path.relative(downloadsDir, finalPath);
-    const safePath = relPath;
 
-    await dbFile.update({
-      status: "done",
-      path: safePath
-    });
-    await torrenter.remove(dbFile.torrentHash, false);
-    console.log(`[File #${dbFile.id}] Finished successfully.`);
+    if (!cancelled()) {
+      await updateRow({
+        status: "done",
+        path: relPath
+      });
+      console.log(`[File #${dbFile.id}] Finished successfully.`);
+    }
+    await torrenter.remove(dbFile.torrentHash, false, downloadDir);
   }).catch(async (err) => {
-    // Update status to 'failed' if an error occurs
     console.error(`[File #${dbFile.id}] Process failed:`, err);
-    await dbFile.update({ status: "failed" });
-    await torrenter.remove(dbFile.torrentHash, false);
+    if (!cancelled()) {
+      try {
+        await updateRow({ status: "failed" });
+      } catch (updateErr) {
+        console.error(`[File #${dbFile.id}] Could not mark failed:`, updateErr.message);
+      }
+    }
+    await torrenter.remove(dbFile.torrentHash, false, downloadDir);
   });
 }
 
 // Serial jobs avoid duplicate WebTorrent instances for season packs and bound CPU/disk work.
 const queue = [];
 let running = false;
+// The job currently occupying the serial queue. Deleting its media row must
+// abort it, otherwise the queue stays blocked until the download finishes.
+let activeJob = null;
 
 // Forget a pending job, e.g. when its media row was deleted. Jobs that are
 // already running are stopped through the torrent client instead.
@@ -158,8 +185,12 @@ export async function drainQueue() {
       try { file = await Files.findByPk(pending.id); }
       catch (err) { console.error('[queue]', err.message); queue.unshift(pending); break; }
       if (!file || file.status !== 'downloading') continue;
-      try { await startTorrentDownload(file); }
+
+      const state = { uuid: file.uuid, cancelled: false, controller: new AbortController() };
+      activeJob = state;
+      try { await startTorrentDownload(file, state); }
       catch (err) { console.error('[queue]', err.message); }
+      finally { if (activeJob === state) activeJob = null; }
     }
   } finally { running = false; }
 }
@@ -240,19 +271,24 @@ app.delete("/api/admin/files/:uuid", authMiddleware.checkManager, async (req, re
       return res.status(404).json({ success: false, error: "File not found" });
     }
 
-    // Drop it from the pending queue first so a deleted job can never start
-    // downloading after the media row is gone.
-    dequeue(file.uuid);
-
-    // Stop the torrent (and drop its data from disk) if it is still active
     if (file.status === "transcoding") return res.status(409).json({ error: "Wait for conversion to finish before deleting this file" });
+
+    // Drop it from the pending queue and cancel the running job first: a
+    // deleted row must not keep the serial queue (and its torrent) alive.
+    dequeue(file.uuid);
+    const downloadDir = path.join(downloadsDir, file.uuid);
+    if (activeJob && activeJob.uuid === file.uuid) {
+      activeJob.cancelled = true;
+      activeJob.controller.abort();
+    }
+
     await file.update({ status: "failed" });
-    if (file.torrentHash && torrenter.findClientTorrent(file.torrentHash)?.path === path.join(downloadsDir, file.uuid)) {
-      try {
-        await torrenter.remove(file.torrentHash, true);
-      } catch (err) {
-        console.error("Failed to remove torrent:", err);
-      }
+    // Match by hash, or by this row's download directory when the magnet hash
+    // has not been parsed into WebTorrent's hex form yet.
+    try {
+      await torrenter.remove(file.torrentHash, true, downloadDir);
+    } catch (err) {
+      console.error("Failed to remove torrent:", err);
     }
 
     // torrenter.remove only wipes the torrent store; the converted MP4 (ffmpeg
@@ -267,7 +303,7 @@ app.delete("/api/admin/files/:uuid", authMiddleware.checkManager, async (req, re
       }
     }
 
-    fs.rmSync(path.join(downloadsDir, file.uuid), { recursive: true, force: true });
+    fs.rmSync(downloadDir, { recursive: true, force: true });
     fs.rmSync(path.join(downloadsDir, `${file.uuid}.mp4`), { force: true });
     await file.destroy();
 

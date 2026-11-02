@@ -145,17 +145,27 @@ export class TorrentHelper {
       const metadataTimeoutMs = Number.isFinite(Number(options.metadataTimeoutMs))
         ? Number(options.metadataTimeoutMs)
         : Number(process.env.TORRENT_METADATA_TIMEOUT_MS) || 90_000;
+      const signal = options.signal;
 
+      const onAbort = () => settle(reject, new Error('Download cancelled'));
       const settle = (fn, value) => {
         if (settled) return;
         settled = true;
         clearTimeout(metadataTimer);
+        signal?.removeEventListener('abort', onAbort);
         fn(value);
       };
 
+      // Delete can land before WebTorrent has even parsed the magnet.
+      if (signal?.aborted) {
+        settle(reject, new Error('Download cancelled'));
+        return;
+      }
+      signal?.addEventListener('abort', onAbort, { once: true });
+
       try {
         // Rename on destructure so the imported `path` module stays usable here
-        const { onlyVideo = true, selectVideo, metadataTimeoutMs: _timeout, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
+        const { onlyVideo = true, selectVideo, metadataTimeoutMs: _timeout, signal: _signal, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
 
         const torrent = this.client.add(torrentId, { ...webtorrentOpts, path: downloadPath }, (addedTorrent) => {
           if (settled) return;
@@ -212,14 +222,19 @@ export class TorrentHelper {
         if (requestedHash) this.activeDownloads.set(requestedHash, torrent);
         if (torrent.infoHash) this.activeDownloads.set(torrent.infoHash, torrent);
 
-        torrent.on('error', (err) => settle(reject, err));
+        torrent.once('error', (err) => settle(reject, err));
+        // Removing the torrent during the metadata handshake does not emit an
+        // error, so without this the download() promise waited for the timeout.
+        torrent.once('close', () => settle(reject, new Error('Download cancelled')));
 
         // A dead magnet otherwise leaves the serial queue "downloading"
         // forever, with nothing the operator can pause or skip.
-        metadataTimer = setTimeout(() => {
-          settle(reject, new Error('torrent metadata timed out - no peers found for this magnet'));
-        }, metadataTimeoutMs);
-        if (typeof metadataTimer.unref === 'function') metadataTimer.unref();
+        if (!settled) {
+          metadataTimer = setTimeout(() => {
+            settle(reject, new Error('torrent metadata timed out - no peers found for this magnet'));
+          }, metadataTimeoutMs);
+          if (typeof metadataTimer.unref === 'function') metadataTimer.unref();
+        }
       } catch (err) {
         settle(reject, err);
       }
@@ -246,13 +261,19 @@ export class TorrentHelper {
    * @param {string|Object} torrentOrHash - WebTorrent instance or infoHash string.
    * @returns {Promise<Object>} Resolves with the torrent instance when done.
    */
-  waitForDone(torrentOrHash) {
+  waitForDone(torrentOrHash, options = {}) {
+    const signal = options.signal;
     const torrent = typeof torrentOrHash === 'string'
       ? (this.activeDownloads.get(torrentOrHash) || this.findClientTorrent(torrentOrHash))
       : torrentOrHash;
 
     if (!torrent) {
       return Promise.reject(new Error('Torrent not found or not currently active.'));
+    }
+
+    const cancelled = () => Boolean(torrent._laroCancelled || torrent.destroyed || signal?.aborted);
+    if (cancelled()) {
+      return Promise.reject(new Error('Download cancelled'));
     }
 
     if (torrent.done) {
@@ -273,23 +294,29 @@ export class TorrentHelper {
 
       const cleanup = () => {
         this._waiters.delete(torrent.infoHash);
+        signal?.removeEventListener('abort', onAbort);
         torrent.removeListener('done', onTorrentDone);
         torrent.removeListener('error', onError);
         torrent.removeListener('close', onClose);
         pending.forEach((file) => file.removeListener('done', onFileDone));
       };
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      };
       const finish = () => {
         if (settled) return;
+        if (cancelled()) return fail(new Error('Download cancelled'));
         settled = true;
         cleanup();
         resolve(torrent);
       };
       const onTorrentDone = () => finish();
-      const onError = (err) => {
-        cleanup();
-        reject(err);
-      };
-      const onClose = () => onError(new Error('Download cancelled'));
+      const onError = (err) => fail(err);
+      const onClose = () => fail(new Error('Download cancelled'));
+      const onAbort = () => fail(new Error('Download cancelled'));
       const onFileDone = () => {
         remaining -= 1;
         if (remaining <= 0) finish();
@@ -299,7 +326,12 @@ export class TorrentHelper {
       torrent.once('done', onTorrentDone);
       torrent.once('error', onError);
       torrent.once('close', onClose);
+      signal?.addEventListener('abort', onAbort, { once: true });
       pending.forEach((file) => file.once('done', onFileDone));
+
+      // The torrent may have been destroyed between the first check and the
+      // listeners above. Its 'close' event is already gone, so settle now.
+      if (cancelled()) fail(new Error('Download cancelled'));
     });
   }
 
@@ -339,17 +371,25 @@ export class TorrentHelper {
     const downloadDir = options.downloadDir || options.path || './downloads';
     const onlyVideo = options.onlyVideo !== false;
     const shouldConvert = options.convert !== false; // Enabled by default unless convert: false
+    const signal = options.signal;
 
     // 1. Download torrent with video selection enabled
     const torrent = await this.download(
       torrentId,
-      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo, metadataTimeoutMs: options.metadataTimeoutMs },
+      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo, metadataTimeoutMs: options.metadataTimeoutMs, signal },
       (stats) => {
         if (typeof onProgress === 'function') {
           onProgress({ stage: 'download', ...stats });
         }
       }
     );
+
+    const ensureNotCancelled = () => {
+      if (signal?.aborted || torrent._laroCancelled || torrent.destroyed) {
+        throw new Error('Download cancelled');
+      }
+    };
+    ensureNotCancelled();
 
     // 2. Metadata is available as soon as the torrent is added — notify the
     // caller so it can persist the real name, path and infoHash.
@@ -370,12 +410,17 @@ export class TorrentHelper {
       }
     }
 
+    // Deleting the media row aborts the pipeline while onReady was awaiting
+    // its database write, so check again before waiting or transcoding.
+    ensureNotCancelled();
+
     // 3. Wait until download is 100% complete (unless the operator asked to
     // convert what is already on disk).
     if (torrent._laroVideoFiles && !torrent._laroVideoFiles.length) throw new Error('No matching video file found in torrent.');
     if (!torrent.done && !torrent._laroSkipRequested) {
-      await this.waitForDone(torrent);
+      await this.waitForDone(torrent, { signal });
     }
+    ensureNotCancelled();
 
     // 4. Find video files and select the largest one
     const videoFiles = torrent._laroVideoFiles || torrent.files.filter((file) => this.isVideoFile(file.name));
@@ -404,6 +449,7 @@ export class TorrentHelper {
     const targetOutput = options.outputPath || path.join(downloadDir, `converted_${torrent.infoHash}_${path.parse(mainVideoFile.name).name}.mp4`);
 
     // 6. Smart conversion (probes codecs and transcodes only if required)
+    ensureNotCancelled();
     const convertedPath = await this.convertAUTO(
       inputPath,
       targetOutput,
@@ -522,19 +568,54 @@ export class TorrentHelper {
    * @param {boolean} [destroyStore=false] - Whether to delete downloaded files from disk.
    * @returns {Promise<boolean>} True if removed successfully.
    */
-  remove(infoHash, destroyStore = false) {
+  remove(infoHash, destroyStore = false, expectedPath = null) {
     return new Promise((resolve) => {
       const wanted = String(infoHash || '').toLowerCase();
-      const torrent = this.activeDownloads.get(wanted) || this.findClientTorrent(wanted);
-      if (!torrent) {
+      const expected = expectedPath ? path.resolve(expectedPath) : null;
+      // A torrent may not have parsed its infoHash yet, so allow a path match
+      // to identify it when the stored hash is the magnet's spelling.
+      const matchesPath = (candidate) => !expected || !candidate?.path || path.resolve(candidate.path) === expected;
+
+      let torrent = this.activeDownloads.get(wanted) || this.findClientTorrent(wanted);
+      if (!torrent || !matchesPath(torrent)) {
+        torrent = (this.client.torrents || []).find((candidate) => matchesPath(candidate)) || null;
+      }
+      if (!torrent || !matchesPath(torrent)) {
         return resolve(false);
       }
 
-      torrent.destroy({ destroyStore }, () => {
+      // Another caller (the failed pipeline or the delete route) may already
+      // have destroyed this torrent. WebTorrent then skips its destroy
+      // callback entirely, which used to leave DELETE and the queue waiting
+      // forever.
+      const forget = () => {
         this.activeDownloads.delete(wanted);
         if (torrent.infoHash) this.activeDownloads.delete(torrent.infoHash);
+      };
+      if (torrent.destroyed) {
+        forget();
+        return resolve(true);
+      }
+
+      // Stop waitForDone/convert even when destroy's 'close' event is missed
+      // by a listener that is being attached at this exact moment.
+      torrent._laroCancelled = true;
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        forget();
         resolve(true);
-      });
+      };
+
+      // 'close' fires synchronously once destroy starts, so it settles even if
+      // a store/discovery teardown callback never comes back.
+      torrent.once('close', finish);
+      try {
+        torrent.destroy({ destroyStore }, finish);
+      } catch {
+        finish();
+      }
     });
   }
 
@@ -643,7 +724,25 @@ export class TorrentHelper {
    */
   _runFfmpeg({ inputPath, outputPath, videoCodec, audioCodec, options = {}, onProgress }) {
     return new Promise((resolve, reject) => {
+      const signal = options.signal;
       let command = ffmpeg(inputPath);
+      let finished = false;
+      const onAbort = () => {
+        try { command.kill('SIGKILL'); } catch { /* not running yet */ }
+        done(reject, new Error('Download cancelled'));
+      };
+      const done = (fn, value) => {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener('abort', onAbort);
+        fn(value);
+      };
+
+      if (signal?.aborted) {
+        done(reject, new Error('Download cancelled'));
+        return;
+      }
+      signal?.addEventListener('abort', onAbort, { once: true });
 
       if (videoCodec) command = command.videoCodec(videoCodec);
       if (audioCodec) command = command.audioCodec(audioCodec);
@@ -670,8 +769,8 @@ export class TorrentHelper {
             });
           }
         })
-        .on('end', () => resolve(outputPath))
-        .on('error', (err) => reject(err))
+        .on('end', () => done(resolve, outputPath))
+        .on('error', (err) => done(reject, err))
         .save(outputPath);
     });
   }
