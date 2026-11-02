@@ -5,111 +5,917 @@
     <link rel="stylesheet" href="../themes/darkTheme/sidebar.css">
     <link rel="stylesheet" href="../themes/darkTheme/theme.css">
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#05070c">
     <title>Watch Laro - Streaming for everyone</title>
+    <script>document.documentElement.classList.add('wl-has-mobile-home');</script>
+    <style>
+        /* ------------------------------------------------------------------
+           Mobile home. Shown below 768px; the desktop feed keeps its layout.
+           ------------------------------------------------------------------ */
+        .wl-mobile-home { display: none; }
 
+        @media (max-width: 767.98px) {
+            html.wl-has-mobile-home,
+            html.wl-has-mobile-home body {
+                height: 100%;
+                overflow: hidden;
+                background: #05070c;
+            }
+
+            html.wl-has-mobile-home .content { display: none !important; }
+            html.wl-has-mobile-home .wl-site-nav { display: none !important; }
+
+            .wl-mobile-home {
+                --wl-blue: #1d4ed8;
+                --wl-blue-bright: #3b82f6;
+                --wl-ink: #f8fafc;
+                --wl-muted: #9ca3af;
+                position: fixed;
+                inset: 0;
+                z-index: 100;
+                display: flex;
+                height: 100vh;
+                height: 100dvh;
+                flex-direction: column;
+                overflow: hidden;
+                background:
+                    radial-gradient(ellipse 85% 42% at 50% -8%, rgba(37, 99, 235, .28), transparent 70%),
+                    #05070c;
+                color: var(--wl-ink);
+                font-family: "Twemoji Mozilla", Arial, Helvetica, sans-serif;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            .wl-appbar {
+                display: flex;
+                flex: none;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: calc(10px + env(safe-area-inset-top)) 18px 8px;
+            }
+
+            .wl-brand {
+                display: inline-flex;
+                min-width: 0;
+                align-items: center;
+                gap: 9px;
+                color: var(--wl-ink);
+                text-decoration: none;
+            }
+
+            .wl-brand img {
+                width: 27px;
+                height: 31px;
+                flex: none;
+                object-fit: contain;
+                filter: drop-shadow(0 4px 12px rgba(37, 99, 235, .35));
+            }
+
+            .wl-brand span {
+                overflow: hidden;
+                font-size: 25px;
+                font-weight: 800;
+                letter-spacing: -.04em;
+                line-height: 1;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .wl-appbar-actions {
+                display: flex;
+                flex: none;
+                align-items: center;
+                gap: 2px;
+            }
+
+            .wl-icon-button {
+                display: inline-grid;
+                width: 36px;
+                height: 36px;
+                place-items: center;
+                border: 0;
+                border-radius: 50%;
+                background: transparent;
+                color: #e5e7eb;
+                font-size: 16px;
+                text-decoration: none;
+                transition: background-color .16s ease, color .16s ease, transform .16s ease;
+            }
+
+            .wl-icon-button:active {
+                background: rgba(255, 255, 255, .12);
+                color: #fff;
+                transform: scale(.94);
+            }
+
+            .wl-scroll {
+                min-height: 0;
+                flex: 1;
+                overflow-x: hidden;
+                overflow-y: auto;
+                overscroll-behavior-y: contain;
+                padding-bottom: calc(92px + env(safe-area-inset-bottom));
+                scrollbar-width: none;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .wl-scroll::-webkit-scrollbar { display: none; }
+
+            .wl-chips {
+                display: flex;
+                gap: 8px;
+                overflow-x: auto;
+                padding: 8px 16px 12px;
+                scrollbar-width: none;
+            }
+
+            .wl-chips::-webkit-scrollbar { display: none; }
+
+            .wl-chip {
+                display: inline-flex;
+                min-height: 38px;
+                flex: none;
+                align-items: center;
+                justify-content: center;
+                padding: 0 17px;
+                border: 1px solid rgba(255, 255, 255, .07);
+                border-radius: 999px;
+                background: rgba(255, 255, 255, .09);
+                color: #f3f4f6;
+                font-size: 13px;
+                font-weight: 700;
+                line-height: 1;
+                text-decoration: none;
+                transition: background-color .16s ease, border-color .16s ease, transform .16s ease;
+            }
+
+            .wl-chip:active { transform: scale(.96); }
+
+            .wl-chip.is-active {
+                border-color: var(--wl-blue-bright);
+                background: var(--wl-blue);
+                box-shadow: 0 6px 20px rgba(29, 78, 216, .32);
+                color: #fff;
+            }
+
+            .wl-hero {
+                position: relative;
+                display: flex;
+                height: clamp(360px, 55vh, 470px);
+                flex-direction: column;
+                justify-content: flex-end;
+                margin: 4px 16px 0;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, .08);
+                border-radius: 24px;
+                background:
+                    radial-gradient(circle at 50% 8%, rgba(59, 130, 246, .32), transparent 52%),
+                    linear-gradient(160deg, #0b1733 0%, #070b14 62%, #05070c 100%);
+                box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+                isolation: isolate;
+            }
+
+            .wl-hero-media {
+                position: absolute;
+                inset: 0;
+                z-index: -3;
+                background-position: center top;
+                background-repeat: no-repeat;
+                background-size: cover;
+                opacity: 0;
+                transform: scale(1.02);
+                transition: opacity .5s ease;
+            }
+
+            .wl-hero.has-art .wl-hero-media { opacity: 1; }
+
+            .wl-hero::before {
+                position: absolute;
+                inset: 0;
+                z-index: -2;
+                background:
+                    linear-gradient(180deg, rgba(5, 7, 12, .08) 0%, rgba(5, 7, 12, .18) 32%, rgba(5, 7, 12, .9) 76%, #05070c 100%),
+                    linear-gradient(90deg, rgba(5, 7, 12, .55) 0%, transparent 48%, rgba(5, 7, 12, .2) 100%);
+                content: "";
+            }
+
+            .wl-hero::after {
+                position: absolute;
+                inset: 0;
+                z-index: -1;
+                border-radius: inherit;
+                background: linear-gradient(180deg, transparent 55%, rgba(5, 7, 12, .62));
+                content: "";
+                pointer-events: none;
+            }
+
+            .wl-hero-content {
+                position: relative;
+                padding: 18px;
+                text-align: left;
+            }
+
+            .wl-kicker {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin: 0 0 7px;
+                color: #bfdbfe;
+                font-size: 9.5px;
+                font-weight: 800;
+                letter-spacing: .16em;
+                text-transform: uppercase;
+            }
+
+            .wl-kicker img {
+                width: 12px;
+                height: 14px;
+                object-fit: contain;
+            }
+
+            .wl-hero h1 {
+                max-width: 12ch;
+                margin: 0;
+                color: #fff;
+                font-size: clamp(2rem, 10.5vw, 3.15rem);
+                font-weight: 900;
+                letter-spacing: -.055em;
+                line-height: .94;
+                text-wrap: balance;
+                text-shadow: 0 3px 24px rgba(0, 0, 0, .4);
+            }
+
+            .wl-hero-meta {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 7px;
+                margin-top: 10px;
+                color: #d1d5db;
+                font-size: 11.5px;
+                font-weight: 600;
+            }
+
+            .wl-hero-meta .wl-score { color: #93c5fd; }
+
+            .wl-hero-meta .wl-dot {
+                width: 3px;
+                height: 3px;
+                border-radius: 50%;
+                background: #6b7280;
+            }
+
+            .wl-overview {
+                display: -webkit-box;
+                max-width: 44ch;
+                margin: 9px 0 0;
+                overflow: hidden;
+                color: #d1d5db;
+                font-size: 12px;
+                line-height: 1.45;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 3;
+            }
+
+            .wl-hero-actions {
+                display: flex;
+                gap: 9px;
+                margin-top: 14px;
+            }
+
+            .wl-button {
+                display: inline-flex;
+                min-height: 45px;
+                flex: 1;
+                align-items: center;
+                justify-content: center;
+                gap: 7px;
+                padding: 0 14px;
+                border: 0;
+                border-radius: 11px;
+                font-family: inherit;
+                font-size: 13.5px;
+                font-weight: 800;
+                text-decoration: none;
+                transition: transform .16s ease, background-color .16s ease;
+            }
+
+            .wl-button:active { transform: scale(.97); }
+
+            .wl-button-primary {
+                background: linear-gradient(180deg, #2f6df6 0%, var(--wl-blue) 100%);
+                box-shadow: 0 8px 24px rgba(29, 78, 216, .38);
+                color: #fff;
+            }
+
+            .wl-button-primary i { font-size: 12px; }
+
+            .wl-button-ghost {
+                border: 1px solid rgba(255, 255, 255, .12);
+                background: rgba(18, 24, 36, .74);
+                color: #f3f4f6;
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+            }
+
+            .wl-row { margin-top: 24px; }
+
+            .wl-row-head {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 0 16px 10px;
+            }
+
+            .wl-row-head h2 {
+                margin: 0;
+                color: #f9fafb;
+                font-size: 17px;
+                font-weight: 800;
+                letter-spacing: -.02em;
+            }
+
+            .wl-row-head a {
+                flex: none;
+                color: #93c5fd;
+                font-size: 11px;
+                font-weight: 700;
+                text-decoration: none;
+            }
+
+            .wl-row-track {
+                display: flex;
+                gap: 10px;
+                overflow-x: auto;
+                padding: 1px 16px 4px;
+                scroll-padding-left: 16px;
+                scroll-snap-type: x mandatory;
+                scrollbar-width: none;
+            }
+
+            .wl-row-track::-webkit-scrollbar { display: none; }
+
+            .wl-card {
+                display: flex;
+                width: 116px;
+                flex: 0 0 116px;
+                flex-direction: column;
+                gap: 6px;
+                color: #f3f4f6;
+                scroll-snap-align: start;
+                text-decoration: none;
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            .wl-card-art {
+                position: relative;
+                display: grid;
+                width: 116px;
+                height: 174px;
+                overflow: hidden;
+                place-items: center;
+                border: 1px solid rgba(255, 255, 255, .08);
+                border-radius: 13px;
+                background:
+                    radial-gradient(circle at 50% 8%, rgba(59, 130, 246, .25), transparent 52%),
+                    #111827;
+                box-shadow: 0 10px 24px rgba(0, 0, 0, .28);
+                transition: transform .18s ease, border-color .18s ease;
+            }
+
+            .wl-card:active .wl-card-art {
+                border-color: rgba(147, 197, 253, .7);
+                transform: scale(.97);
+            }
+
+            .wl-card-art img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .wl-card-art .wl-card-fallback {
+                padding: 12px;
+                color: #dbeafe;
+                font-size: 13px;
+                font-weight: 800;
+                line-height: 1.2;
+                text-align: center;
+            }
+
+            .wl-card-art::after {
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                background: linear-gradient(180deg, transparent 72%, rgba(0, 0, 0, .34));
+                content: "";
+                pointer-events: none;
+            }
+
+            .wl-card-rank {
+                position: absolute;
+                bottom: 5px;
+                left: 7px;
+                z-index: 1;
+                color: #fff;
+                font-size: 22px;
+                font-weight: 900;
+                letter-spacing: -.06em;
+                line-height: 1;
+                text-shadow: 0 2px 8px rgba(0, 0, 0, .7);
+            }
+
+            .wl-card-title {
+                display: -webkit-box;
+                overflow: hidden;
+                color: #d1d5db;
+                font-size: 10.5px;
+                font-weight: 600;
+                line-height: 1.25;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 1;
+            }
+
+            .wl-skeleton {
+                flex: 0 0 116px;
+                height: 174px;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, .05);
+                border-radius: 13px;
+                background: #111827;
+            }
+
+            .wl-skeleton::after {
+                display: block;
+                width: 60%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .07), transparent);
+                content: "";
+                animation: wl-shimmer 1.5s infinite;
+                transform: translateX(-120%);
+            }
+
+            .wl-row-message {
+                margin: 0 16px;
+                padding: 18px;
+                border: 1px dashed rgba(255, 255, 255, .12);
+                border-radius: 14px;
+                color: var(--wl-muted);
+                font-size: 12px;
+                line-height: 1.5;
+            }
+
+            .wl-row-message a { color: #93c5fd; font-weight: 700; }
+
+            .wl-bottom-nav {
+                position: absolute;
+                right: 0;
+                bottom: 0;
+                left: 0;
+                z-index: 5;
+                display: grid;
+                grid-template-columns: repeat(5, 1fr);
+                padding: 7px 4px calc(7px + env(safe-area-inset-bottom));
+                border-top: 1px solid rgba(255, 255, 255, .08);
+                background: rgba(5, 7, 12, .94);
+                backdrop-filter: blur(22px);
+                -webkit-backdrop-filter: blur(22px);
+            }
+
+            .wl-nav-item {
+                position: relative;
+                display: flex;
+                min-height: 47px;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+                border-radius: 12px;
+                color: #9ca3af;
+                font-size: 9.5px;
+                font-weight: 700;
+                text-decoration: none;
+                transition: color .16s ease, transform .16s ease;
+            }
+
+            .wl-nav-item i { font-size: 18px; line-height: 1; }
+
+            .wl-nav-item:active { transform: scale(.94); }
+
+            .wl-nav-item.is-active { color: #fff; }
+
+            .wl-nav-item.is-active::before {
+                position: absolute;
+                top: 0;
+                width: 22px;
+                height: 3px;
+                border-radius: 0 0 4px 4px;
+                background: var(--wl-blue-bright);
+                box-shadow: 0 0 12px rgba(59, 130, 246, .7);
+                content: "";
+            }
+
+            @keyframes wl-shimmer {
+                to { transform: translateX(220%); }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .wl-mobile-home *,
+                .wl-mobile-home *::before,
+                .wl-mobile-home *::after {
+                    scroll-behavior: auto !important;
+                    transition-duration: .01ms !important;
+                    animation-duration: .01ms !important;
+                    animation-iteration-count: 1 !important;
+                }
+            }
+        }
+
+        @media (min-width: 768px) {
+            .wl-mobile-home { display: none !important; }
+        }
+    </style>
 </head>
 
 <body>
     <%- include('header.ejs') %>
-        <div class="content">
-            <div class="justify-items-center align-center">
-                <h1 class="text-l font-bold">Problems when watching? Click <a href="/troubleshoot" class="text-blue-500 underline">here!</a></h1>
+    <script>
+        // The mobile home replaces the site navbar and feed below 768px.
+        document.querySelectorAll('body > nav').forEach(function (nav) {
+            nav.classList.add('wl-site-nav');
+        });
+    </script>
+
+    <div class="wl-mobile-home" id="wlMobileHome" aria-label="WatchLaro mobile home">
+        <header class="wl-appbar">
+            <a href="/" class="wl-brand" aria-label="WatchLaro home">
+                <img src="/WatchLaroLogoDarj.png" alt="" width="27" height="31">
+                <span>Home</span>
+            </a>
+            <div class="wl-appbar-actions">
+                <a href="/movies/search" class="wl-icon-button" aria-label="Search movies" title="Search">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                </a>
+                <a href="/comingsoon" class="wl-icon-button" aria-label="My list" title="My list">
+                    <i class="fa-solid fa-bookmark" aria-hidden="true"></i>
+                </a>
+                <% if (uuid) { %>
+                <a href="/profile/<%= encodeURIComponent(username || '') %>" class="wl-icon-button" aria-label="Your profile" title="Profile">
+                    <i class="fa-solid fa-circle-user" aria-hidden="true"></i>
+                </a>
+                <% } else { %>
+                <a href="/login" class="wl-icon-button" aria-label="Sign in" title="Sign in">
+                    <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+                </a>
+                <% } %>
             </div>
-            <section class="p-10">
-                <h1 class="text-4xl font-black pb-2">🍿 Now Playing</h1>
-                <div class="flex flex-col align-center overflow-y-hidden">
-                    <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="now_playing">
+        </header>
 
+        <main class="wl-scroll" id="wlMobileScroll">
+            <nav class="wl-chips" aria-label="Browse">
+                <a href="#wl-trending" class="wl-chip is-active" aria-current="true">Trending</a>
+                <a href="/movies/search" class="wl-chip">Movies</a>
+                <a href="/tv/search" class="wl-chip">TV Shows</a>
+                <a href="#wl-new" class="wl-chip">New &amp; Hot</a>
+                <a href="#wl-top" class="wl-chip">Top Rated</a>
+            </nav>
+
+            <section class="wl-hero" id="wlHero" aria-labelledby="wlHeroTitle">
+                <div class="wl-hero-media" id="wlHeroMedia" role="img" aria-label="Featured title artwork"></div>
+                <div class="wl-hero-content">
+                    <p class="wl-kicker"><img src="/WatchLaroLogoDarj.png" alt="">Featured on WatchLaro</p>
+                    <h1 id="wlHeroTitle">Your next<br>favorite is here.</h1>
+                    <div class="wl-hero-meta" id="wlHeroMeta">
+                        <span>Movies</span><span class="wl-dot"></span><span>Series</span><span class="wl-dot"></span><span class="wl-score">Always on</span>
+                    </div>
+                    <p class="wl-overview" id="wlHeroOverview">Stream a huge catalogue of movies and TV, ready whenever you are.</p>
+                    <div class="wl-hero-actions">
+                        <a href="/movies/search" class="wl-button wl-button-primary" id="wlHeroPlay">
+                            <i class="fa-solid fa-play" aria-hidden="true"></i>Browse movies
+                        </a>
+                        <a href="/tv/search" class="wl-button wl-button-ghost" id="wlHeroSecondary">
+                            <i class="fa-solid fa-tv" aria-hidden="true"></i>TV shows
+                        </a>
                     </div>
                 </div>
             </section>
 
-            <section class="p-10">
-                <h1 class="text-4xl font-black pb-2">🤩 Popular Right Now</h1>
-                <div class="flex flex-col align-center">
-                    <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="popular">
-
-                    </div>
+            <section class="wl-row" id="wl-trending" aria-labelledby="wlTrendingTitle">
+                <div class="wl-row-head">
+                    <h2 id="wlTrendingTitle">Trending Now</h2>
+                    <a href="/movies/search">See all</a>
                 </div>
-
+                <div class="wl-row-track" id="wlRowPopular" aria-busy="true">
+                    <div class="wl-skeleton"></div><div class="wl-skeleton"></div><div class="wl-skeleton"></div><div class="wl-skeleton"></div>
+                </div>
             </section>
 
-            <section class="p-10">
-                <h1 class="text-4xl font-black pb-2">🔥 Top Rated</h1>
-                <div class="flex flex-col align-center">
-                    <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="top_rated">
-
-                    </div>
+            <section class="wl-row" id="wl-new" aria-labelledby="wlNewTitle">
+                <div class="wl-row-head">
+                    <h2 id="wlNewTitle">New &amp; Hot</h2>
+                    <a href="/movies/search">See all</a>
                 </div>
-
+                <div class="wl-row-track" id="wlRowNowPlaying" aria-busy="true">
+                    <div class="wl-skeleton"></div><div class="wl-skeleton"></div><div class="wl-skeleton"></div><div class="wl-skeleton"></div>
+                </div>
             </section>
 
-            <script>
+            <section class="wl-row" id="wl-top" aria-labelledby="wlTopTitle">
+                <div class="wl-row-head">
+                    <h2 id="wlTopTitle">Top Rated</h2>
+                    <a href="/movies/search">See all</a>
+                </div>
+                <div class="wl-row-track" id="wlRowTopRated" aria-busy="true">
+                    <div class="wl-skeleton"></div><div class="wl-skeleton"></div><div class="wl-skeleton"></div><div class="wl-skeleton"></div>
+                </div>
+            </section>
+        </main>
 
-                async function getFeedData() {
-                    const response = await fetch("/api/movies/feed")
+        <nav class="wl-bottom-nav" aria-label="Main navigation">
+            <a href="/" class="wl-nav-item is-active" aria-current="page">
+                <i class="fa-solid fa-house" aria-hidden="true"></i><span>Home</span>
+            </a>
+            <a href="/movies/search" class="wl-nav-item">
+                <i class="fa-solid fa-film" aria-hidden="true"></i><span>Movies</span>
+            </a>
+            <a href="/tv/search" class="wl-nav-item">
+                <i class="fa-solid fa-tv" aria-hidden="true"></i><span>TV</span>
+            </a>
+            <a href="/movies/search" class="wl-nav-item">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Search</span>
+            </a>
+            <% if (uuid) { %>
+            <a href="/profile/<%= encodeURIComponent(username || '') %>" class="wl-nav-item">
+                <i class="fa-solid fa-circle-user" aria-hidden="true"></i><span>Profile</span>
+            </a>
+            <% } else { %>
+            <a href="/login" class="wl-nav-item">
+                <i class="fa-solid fa-circle-user" aria-hidden="true"></i><span>Sign in</span>
+            </a>
+            <% } %>
+        </nav>
+    </div>
 
-                    if (response.ok) {
-                        const data = await response.json()
-
-                        data.now_playing.results.forEach(element => {
-                            putPoster("now_playing", element)
-                        });
-                        data.popular.results.forEach(element => {
-                            putPoster("popular", element)
-                        });
-                        data.top_rated.results.forEach(element => {
-                            putPoster("top_rated", element)
-                        })
-                    } else {
-                        // document.getElementById('debugthing').innerText = 'fetch err'
-                    }
-                }
-                async function putPoster(category, element) {
-                    const div = document.createElement("div")
-                    div.classList.add("w-[200px]", "flex-shrink-0")
-                    const btn = document.createElement("button")
-                    btn.classList.add("relative","z-10", "rounded-md", "flex", "flex-col", "align-center", "hover:scale-[105%]", "transition-all", "duration-150", "group")
-                    btn.onclick = function () {
-                        window.location.href = "/movies/info?q=" + element.id
-                    }
-                    const img = document.createElement("img")
-                    img.classList.add("rounded-md", "blur-none", "hover:blur-[4px]", "z-20")
-                    const text = document.createElement("h2")
-                    text.classList.add("absolute", "bottom-4", "text-lg", "font-bold", "opacity-0", "translate-y-full", "group-hover:opacity-100", "group-hover:translate-y-0", "ease-in-out", "duration-200", "text-center", "w-full", "left-0", "z-30")
-                    text.innerText = element.title
-                    //img.classList.add()
-                    img.src = "https://image.tmdb.org/t/p/w500" + element.poster_path
-                    document.getElementById(category).appendChild(div)
-                    div.appendChild(btn)
-                    btn.appendChild(img)
-                    btn.appendChild(text)
-                }
-                try {
-                    getFeedData()
-                } catch (err) {
-                    throw new Error(err)
-                }
-
-            </script>
-            <script>
-                (async () => {
-                    const hasBeenNotified = await cookieStore.get("notifiedUser");
-
-                    if (false) {
-                        Swal.fire({
-                            title: "Welcome! Notice for travelers.",
-                            theme: "auto",
-                            html: "We do not host any of the movie files, we are a search engine. We search the web and find a playable link for you to watch. If you would like to take down a movie, please contact the owners of the media. Made with love by Nope."
-                        })
-                        cookieStore.set("notifiedUser", true, { expires: Date.now() + 60 * 60 * 24 })
-                    }
-                })()
-            </script>
-
-
+    <div class="content">
+        <div class="justify-items-center align-center">
+            <h1 class="text-l font-bold">Problems when watching? Click <a href="/troubleshoot" class="text-blue-500 underline">here!</a></h1>
         </div>
+        <section class="p-10">
+            <h1 class="text-4xl font-black pb-2">🍿 Now Playing</h1>
+            <div class="flex flex-col align-center overflow-y-hidden">
+                <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="now_playing">
+
+                </div>
+            </div>
+        </section>
+
+        <section class="p-10">
+            <h1 class="text-4xl font-black pb-2">🤩 Popular Right Now</h1>
+            <div class="flex flex-col align-center">
+                <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="popular">
+
+                </div>
+            </div>
+
+        </section>
+
+        <section class="p-10">
+            <h1 class="text-4xl font-black pb-2">🔥 Top Rated</h1>
+            <div class="flex flex-col align-center">
+                <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="top_rated">
+
+                </div>
+            </div>
+
+        </section>
+
+        <script>
+
+            async function getFeedData() {
+                const response = await fetch("/api/movies/feed")
+
+                if (response.ok) {
+                    const data = await response.json()
+
+                    data.now_playing.results.forEach(element => {
+                        putPoster("now_playing", element)
+                    });
+                    data.popular.results.forEach(element => {
+                        putPoster("popular", element)
+                    });
+                    data.top_rated.results.forEach(element => {
+                        putPoster("top_rated", element)
+                    })
+                } else {
+                    // document.getElementById('debugthing').innerText = 'fetch err'
+                }
+            }
+            async function putPoster(category, element) {
+                const div = document.createElement("div")
+                div.classList.add("w-[200px]", "flex-shrink-0")
+                const btn = document.createElement("button")
+                btn.classList.add("relative","z-10", "rounded-md", "flex", "flex-col", "align-center", "hover:scale-[105%]", "transition-all", "duration-150", "group")
+                btn.onclick = function () {
+                    window.location.href = "/movies/info?q=" + element.id
+                }
+                const img = document.createElement("img")
+                img.classList.add("rounded-md", "blur-none", "hover:blur-[4px]", "z-20")
+                const text = document.createElement("h2")
+                text.classList.add("absolute", "bottom-4", "text-lg", "font-bold", "opacity-0", "translate-y-full", "group-hover:opacity-100", "group-hover:translate-y-0", "ease-in-out", "duration-200", "text-center", "w-full", "left-0", "z-30")
+                text.innerText = element.title
+                //img.classList.add()
+                img.src = "https://image.tmdb.org/t/p/w500" + element.poster_path
+                document.getElementById(category).appendChild(div)
+                div.appendChild(btn)
+                btn.appendChild(img)
+                btn.appendChild(text)
+            }
+            try {
+                getFeedData()
+            } catch (err) {
+                throw new Error(err)
+            }
+
+        </script>
+        <script>
+            (async () => {
+                const hasBeenNotified = await cookieStore.get("notifiedUser");
+
+                if (false) {
+                    Swal.fire({
+                        title: "Welcome! Notice for travelers.",
+                        theme: "auto",
+                        html: "We do not host any of the movie files, we are a search engine. We search the web and find a playable link for you to watch. If you would like to take down a movie, please contact the owners of the media. Made with love by Nope."
+                    })
+                    cookieStore.set("notifiedUser", true, { expires: Date.now() + 60 * 60 * 24 })
+                }
+            })()
+        </script>
+
+
+    </div>
+
+    <script>
+        (function initMobileHome() {
+            var base = 'https://image.tmdb.org/t/p/';
+            var hero = document.getElementById('wlHero');
+            var media = document.getElementById('wlHeroMedia');
+            var title = document.getElementById('wlHeroTitle');
+            var meta = document.getElementById('wlHeroMeta');
+            var overview = document.getElementById('wlHeroOverview');
+            var play = document.getElementById('wlHeroPlay');
+            var secondary = document.getElementById('wlHeroSecondary');
+
+            if (!hero || !media || !title) return;
+
+            function titleOf(item) {
+                return item.title || item.name || 'Untitled';
+            }
+
+            function yearOf(item) {
+                var date = item.release_date || item.first_air_date || '';
+                return date ? String(date).slice(0, 4) : '';
+            }
+
+            function movieHref(item) {
+                return '/movies/info?q=' + encodeURIComponent(item.id);
+            }
+
+            function setHero(item) {
+                if (!item) return;
+                var label = titleOf(item);
+                var poster = item.backdrop_path || item.poster_path;
+                if (poster) {
+                    media.style.backgroundImage = 'url("' + base + (item.backdrop_path ? 'w780' : 'w500') + poster + '")';
+                    hero.classList.add('has-art');
+                }
+                title.textContent = label;
+                media.setAttribute('aria-label', label + ' artwork');
+
+                meta.textContent = '';
+                [yearOf(item), 'Movie', item.vote_average ? '★ ' + Number(item.vote_average).toFixed(1) : '']
+                    .filter(Boolean)
+                    .forEach(function (part, index) {
+                        if (index) {
+                            var dot = document.createElement('span');
+                            dot.className = 'wl-dot';
+                            meta.appendChild(dot);
+                        }
+                        var span = document.createElement('span');
+                        span.textContent = part;
+                        if (part.indexOf('★') === 0) span.className = 'wl-score';
+                        meta.appendChild(span);
+                    });
+
+                overview.textContent = item.overview || 'Ready to watch on WatchLaro.';
+                play.href = movieHref(item);
+                play.innerHTML = '<i class="fa-solid fa-play" aria-hidden="true"></i>Play';
+                secondary.href = '/comingsoon';
+                secondary.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>My List';
+            }
+
+            function makeCard(item, rank) {
+                var link = document.createElement('a');
+                link.className = 'wl-card';
+                link.href = movieHref(item);
+                link.setAttribute('aria-label', 'Open ' + titleOf(item));
+
+                var art = document.createElement('div');
+                art.className = 'wl-card-art';
+
+                if (item.poster_path) {
+                    var img = document.createElement('img');
+                    img.src = base + 'w342' + item.poster_path;
+                    img.alt = '';
+                    img.loading = 'lazy';
+                    img.decoding = 'async';
+                    art.appendChild(img);
+                } else {
+                    var fallback = document.createElement('span');
+                    fallback.className = 'wl-card-fallback';
+                    fallback.textContent = titleOf(item);
+                    art.appendChild(fallback);
+                }
+
+                if (rank) {
+                    var number = document.createElement('span');
+                    number.className = 'wl-card-rank';
+                    number.textContent = rank;
+                    art.appendChild(number);
+                }
+
+                var caption = document.createElement('span');
+                caption.className = 'wl-card-title';
+                caption.textContent = titleOf(item);
+
+                link.appendChild(art);
+                link.appendChild(caption);
+                return link;
+            }
+
+            function fillRow(id, items, numbered) {
+                var track = document.getElementById(id);
+                if (!track) return;
+                track.textContent = '';
+                track.setAttribute('aria-busy', 'false');
+
+                if (!items || !items.length) {
+                    var message = document.createElement('div');
+                    message.className = 'wl-row-message';
+                    message.textContent = 'Nothing here yet. Try a search to find something to watch.';
+                    track.appendChild(message);
+                    return;
+                }
+
+                var seen = {};
+                var added = 0;
+                items.forEach(function (item) {
+                    if (!item || !item.id || seen[item.id] || added >= 14) return;
+                    seen[item.id] = true;
+                    track.appendChild(makeCard(item, numbered ? added + 1 : 0));
+                    added += 1;
+                });
+            }
+
+            function failRows() {
+                ['wlRowPopular', 'wlRowNowPlaying', 'wlRowTopRated'].forEach(function (id) {
+                    var track = document.getElementById(id);
+                    if (!track) return;
+                    track.textContent = '';
+                    track.setAttribute('aria-busy', 'false');
+                    var message = document.createElement('div');
+                    message.className = 'wl-row-message';
+                    message.appendChild(document.createTextNode('The catalogue is taking a break. '));
+                    var link = document.createElement('a');
+                    link.href = '/movies/search';
+                    link.textContent = 'Search for a movie instead →';
+                    message.appendChild(link);
+                    track.appendChild(message);
+                });
+            }
+
+            fetch('/api/movies/feed')
+                .then(function (response) {
+                    if (!response.ok) throw new Error('Feed unavailable');
+                    return response.json();
+                })
+                .then(function (data) {
+                    var popular = (data.popular && data.popular.results) || [];
+                    var nowPlaying = (data.now_playing && data.now_playing.results) || [];
+                    var topRated = (data.top_rated && data.top_rated.results) || [];
+                    var featured = popular.find(function (item) { return item.backdrop_path; }) || popular[0] || nowPlaying[0] || topRated[0];
+
+                    setHero(featured);
+                    fillRow('wlRowPopular', popular, true);
+                    fillRow('wlRowNowPlaying', nowPlaying, false);
+                    fillRow('wlRowTopRated', topRated, false);
+                })
+                .catch(failRows);
+        })();
+    </script>
 
 </body>
 
