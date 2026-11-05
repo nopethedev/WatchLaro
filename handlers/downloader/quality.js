@@ -1,5 +1,5 @@
 /**
- * Shared resolution helpers for torrent file selection.
+ * Shared resolution/codec helpers for torrent file selection.
  *
  * These are intentionally dependency-free so both downloader implementations
  * and their tests use the same rules.
@@ -16,6 +16,14 @@ export function detectQuality(name) {
   return 'unknown';
 }
 
+export function detectCodec(name) {
+  const text = String(name || '').toLowerCase();
+  if (/\b(x265|h\.?265|hevc)\b/.test(text)) return 'x265';
+  if (/\b(x264|h\.?264|avc)\b/.test(text)) return 'x264';
+  if (/\bav1\b/.test(text)) return 'av1';
+  return 'unknown';
+}
+
 export function isJunkVideoName(name) {
   const base = String(name || '').split(/[\\/]/).pop();
   return JUNK_VIDEO_RE.test(base);
@@ -24,6 +32,11 @@ export function isJunkVideoName(name) {
 function qualityOf(file, torrentName) {
   const own = detectQuality(`${file.path || ''} ${file.name || ''}`);
   return own === 'unknown' ? detectQuality(torrentName) : own;
+}
+
+function codecOf(file, torrentName) {
+  const own = detectCodec(`${file.path || ''} ${file.name || ''}`);
+  return own === 'unknown' ? detectCodec(torrentName) : own;
 }
 
 /**
@@ -41,11 +54,20 @@ export function filterByQuality(files, torrentName, preferQuality) {
   return smaller.length ? smaller : files;
 }
 
+/** Keep x264 when the chosen resolution has one; otherwise keep the pool. */
+export function filterByCodec(files, torrentName, preferCodec) {
+  if (!preferCodec || !files.length) return files;
+
+  const preferred = files.filter((file) => codecOf(file, torrentName) === preferCodec);
+  return preferred.length ? preferred : files;
+}
+
 /** Pick one video file, ignoring samples when a real file is available. */
-export function pickPreferredVideoFile(files, torrentName, preferQuality) {
+export function pickPreferredVideoFile(files, torrentName, preferQuality, preferCodec) {
   if (!files.length) return null;
 
   const clean = files.filter((file) => !isJunkVideoName(file.name));
-  const pool = filterByQuality(clean.length ? clean : files, torrentName, preferQuality);
+  let pool = filterByQuality(clean.length ? clean : files, torrentName, preferQuality);
+  pool = filterByCodec(pool, torrentName, preferCodec);
   return pool.slice().sort((a, b) => b.length - a.length)[0] || null;
 }

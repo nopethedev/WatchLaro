@@ -875,64 +875,105 @@
             }, 450);
         }
 
-        function collapseActiveCard() {
-            if (!activeCard) return;
-            var card = activeCard;
-            activeCard = null;
+        var cardPreview = null;
+        var cardExpandTimer = 0;
+        var cardPreviewToken = 0;
+
+        function removeCardPreview() {
+            window.clearTimeout(cardExpandTimer);
+            cardExpandTimer = 0;
+            cardPreviewToken++;
             cardTrailerToken++;
-            card.classList.remove("is-expanded");
-            clearTrailer(card.querySelector(".tv-card-media"));
-            var section = card.closest(".tv-row");
-            var panel = section && section.querySelector(".tv-row-focus");
-            if (panel) panel.classList.remove("is-visible");
+            if (cardPreview && cardPreview.parentNode) cardPreview.parentNode.removeChild(cardPreview);
+            cardPreview = null;
+            if (activeCard) activeCard.classList.remove("is-previewing");
+        }
+
+        function collapseActiveCard() {
+            if (!activeCard && !cardPreview && !cardExpandTimer) return;
+            removeCardPreview();
+            activeCard = null;
             scheduleHeroPreview();
         }
 
-        /** Expand the focused poster into the in-row billboard card. */
+        /** Position the preview as a centered 16:9 card inside the viewport. */
+        function previewRect(card) {
+            var media = card.querySelector(".tv-card-media");
+            var source = (media || card).getBoundingClientRect();
+            var root = window.getComputedStyle(document.documentElement);
+            var rootSize = parseFloat(root.fontSize) || 16;
+            var margin = Math.max((parseFloat(root.getPropertyValue("--tv-pad")) || 4.5) * rootSize, 12);
+            var nav = (parseFloat(root.getPropertyValue("--tv-nav-h")) || 5.5) * rootSize;
+            var width = source.height * (16 / 9);
+            var height = source.height;
+            var maxWidth = window.innerWidth - margin * 2;
+            if (width > maxWidth) {
+                width = maxWidth;
+                height = width * (9 / 16);
+            }
+            var left = source.left + (source.width - width) / 2;
+            var top = source.top + (source.height - height) / 2;
+            left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+            top = Math.max(nav + 8, Math.min(top, window.innerHeight - height - margin));
+            return { left: left, top: top, width: width, height: height };
+        }
+
+        /** Open a fixed 16:9 preview so the row itself never reflows. */
         function expandCard(card) {
-            if (!card || card === activeCard) return;
-            if (activeCard) collapseActiveCard();
-            activeCard = card;
-
+            if (!card || card !== activeCard) return;
             var item = card.__tvItem;
-            card.classList.add("is-expanded");
-            cardTrailerToken++;
-            trailerToken++;
-            clearTrailer(heroMedia);
+            var media = card.querySelector(".tv-card-media");
+            if (!item || !media) return;
 
-            if (item && item.backdrop) {
-                var art = card.querySelector(".tv-card-backdrop");
-                if (art) {
-                    if (!art.getAttribute("src")) {
-                        art.addEventListener("load", function () {
-                            card.classList.add("has-backdrop");
-                        }, { once: true });
-                        art.src = image(item.backdrop, "w780");
-                    } else if (art.complete && art.naturalWidth) {
-                        card.classList.add("has-backdrop");
-                    }
-                }
+            var preview = document.createElement("div");
+            preview.className = "tv-card-preview";
+            preview.setAttribute("aria-hidden", "true");
+
+            var clone = media.cloneNode(true);
+            clone.className = "tv-card-preview-media";
+            var poster = clone.querySelector(".tv-card-poster");
+            if (poster && item.poster) poster.src = image(item.poster, "w500");
+            var backdrop = clone.querySelector(".tv-card-backdrop");
+            if (backdrop && item.backdrop) {
+                backdrop.addEventListener("load", function () {
+                    preview.classList.add("has-backdrop");
+                }, { once: true });
+                backdrop.src = image(item.backdrop, "w780");
+                if (backdrop.complete && backdrop.naturalWidth) preview.classList.add("has-backdrop");
             }
+            preview.appendChild(clone);
 
-            var section = card.closest(".tv-row");
-            var panel = section && section.querySelector(".tv-row-focus");
-            if (panel && item) {
-                panel.querySelector(".tv-row-focus-meta").textContent = metaText(item);
-                panel.querySelector(".tv-row-focus-overview").textContent = item.overview || "";
-                panel.classList.add("is-visible");
-            }
+            var from = media.getBoundingClientRect();
+            preview.style.left = from.left + "px";
+            preview.style.top = from.top + "px";
+            preview.style.width = from.width + "px";
+            preview.style.height = from.height + "px";
+            document.body.appendChild(preview);
 
-            // The focused card keeps its layout width now, so there is no
-            // delayed scroll animation to fight rapid arrow presses.
-            var token = ++cardTrailerToken;
+            cardPreview = preview;
+            card.classList.add("is-previewing");
+            var target = previewRect(card);
+            var token = ++cardPreviewToken;
+
+            window.requestAnimationFrame(function () {
+                if (token !== cardPreviewToken || cardPreview !== preview) return;
+                preview.style.left = target.left + "px";
+                preview.style.top = target.top + "px";
+                preview.style.width = target.width + "px";
+                preview.style.height = target.height + "px";
+                preview.classList.add("is-open");
+            });
+
+            // Let focus settle before fetching a trailer: fast arrow presses
+            // invalidate this token instead of queueing previews.
+            var trailer = ++cardTrailerToken;
             window.setTimeout(function () {
-                if (token !== cardTrailerToken || activeCard !== card || !item) return;
+                if (trailer !== cardTrailerToken || activeCard !== card || cardPreview !== preview) return;
                 loadTrailer(item.type, item.id).then(function (key) {
-                    if (!key || token !== cardTrailerToken || activeCard !== card) return;
-                    var media = card.querySelector(".tv-card-media");
-                    if (media) mountTrailer(media, key);
+                    if (!key || trailer !== cardTrailerToken || activeCard !== card || cardPreview !== preview) return;
+                    mountTrailer(preview.querySelector(".tv-card-preview-media"), key);
                 });
-            }, 700);
+            }, 550);
         }
 
         document.addEventListener("focusin", function (event) {
@@ -942,8 +983,27 @@
                 collapseActiveCard();
                 return;
             }
-            expandCard(card);
+            if (card === activeCard) return;
+
+            collapseActiveCard();
+            activeCard = card;
+            trailerToken++;
+            clearTrailer(heroMedia);
+
+            // A short dwell filters out rapid arrow movement, so no expansion
+            // (and no layout work) happens until the selection settles.
+            cardExpandTimer = window.setTimeout(function () {
+                cardExpandTimer = 0;
+                expandCard(card);
+            }, 220);
         });
+
+        // A manual scroll or resize detaches the fixed overlay from its card;
+        // close it rather than leaving a floating preview behind.
+        window.addEventListener("resize", collapseActiveCard);
+        window.addEventListener("scroll", function () {
+            if (cardPreview) collapseActiveCard();
+        }, true);
 
         function render(feed) {
             rowsHost.innerHTML = "";

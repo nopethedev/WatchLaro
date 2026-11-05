@@ -29,12 +29,18 @@ const candidateCache = new NodeCache({ stdTTL: 3600, checkPeriod: 600 });
 const keyFor = (id, season, episode) =>
     season && episode ? `tv:${id}:${season}:${episode}` : `movie:${id}`;
 
-/** 1080p first; if unavailable, keep 720p/unknown ahead of 4K. */
-const SERIES_QUALITY_RANK = { '1080p': 0, '720p': 1, 'unknown': 2, '2160p': 3, '480p': 4 };
-function prioritizeSeriesQuality(results) {
+const PREFERRED_QUALITY = '1080p';
+const PREFERRED_CODEC = 'x264';
+
+/** 1080p first, then x264; if unavailable, keep 720p/unknown ahead of 4K. */
+const QUALITY_RANK = { '1080p': 0, '720p': 1, 'unknown': 2, '2160p': 3, '480p': 4 };
+const CODEC_RANK = { x264: 0, unknown: 1, av1: 2, x265: 3 };
+function prioritizeCandidates(results) {
     return results.slice().sort((a, b) => {
-        const quality = (SERIES_QUALITY_RANK[a.quality] ?? 2) - (SERIES_QUALITY_RANK[b.quality] ?? 2);
+        const quality = (QUALITY_RANK[a.quality] ?? 2) - (QUALITY_RANK[b.quality] ?? 2);
         if (quality) return quality;
+        const codec = (CODEC_RANK[a.codec] ?? 3) - (CODEC_RANK[b.codec] ?? 3);
+        if (codec) return codec;
         return (b.score || 0) - (a.score || 0) || (b.seeders || 0) - (a.seeders || 0);
     });
 }
@@ -81,8 +87,12 @@ async function resolveCandidates(id, season, episode) {
         console.log(`[search] TMDB query: "${query}" (${key})`);
         let results = [];
         try {
-            results = await downloader.search(query, isSeries ? { limit: 20, quality: '1080p' } : { limit: 20 });
-            if (isSeries) results = prioritizeSeriesQuality(results);
+            results = await downloader.search(query, {
+                limit: 20,
+                quality: PREFERRED_QUALITY,
+                codec: PREFERRED_CODEC,
+            });
+            results = prioritizeCandidates(results);
         } catch (err) {
             console.log(`[search] "${query}" failed: ${err.message}`);
             continue;
@@ -256,7 +266,8 @@ async function handleStream(req, res) {
         // Idle timeout is 10m here; the downloader default is configurable via DOWNLOADER_TIMEOUT_MIN.
         await downloader.stream(magnet, req, res, {
             timeoutMin: 10,
-            preferQuality: season && episode ? '1080p' : undefined,
+            preferQuality: PREFERRED_QUALITY,
+            preferCodec: PREFERRED_CODEC,
         });
     } catch (err) {
         console.error('[stream]', err.message);
@@ -329,7 +340,8 @@ async function handleDownload(req, res) {
 
         // Don't await: this runs for minutes, the player polls progress.
         downloader.downloadAndTranscode(magnet, 10, {
-            preferQuality: season && episode ? '1080p' : undefined,
+            preferQuality: PREFERRED_QUALITY,
+            preferCodec: PREFERRED_CODEC,
         }).catch((err) => {
             console.error('[stream/download]', err.message);
         });

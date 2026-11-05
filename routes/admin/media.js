@@ -64,7 +64,10 @@ app.get("/api/admin/torrent/search", authMiddleware.checkManager, async (req, re
   try {
     const query = String(req.query.q || '').trim();
     if (!query) return res.status(400).json({ error: 'Missing search query' });
-    return res.json(await torrenter.search(query, { limit: 50 }));
+    const quality = ['1080p', '720p', '2160p', '480p'].includes(String(req.query.quality))
+      ? String(req.query.quality)
+      : '1080p';
+    return res.json(await torrenter.search(query, { limit: 50, quality, codec: 'x264' }));
   } catch { return res.status(502).json({ error: 'Torrent search failed' }); }
 });
 
@@ -93,6 +96,7 @@ async function startTorrentDownload(dbFile, state = null) {
       downloadDir,
       outputPath: path.join(downloadsDir, `${dbFile.uuid}.mp4`),
       preferQuality: dbFile.quality || '1080p',
+      preferCodec: 'x264',
       selectVideo: dbFile.type === 'tv' ? (name) => {
         const match = /s(\d+)e(\d+)(?!\d)|\b(\d+)x(\d+)(?!\d)/i.exec(name);
         return match && Number(match[1] || match[3]) === dbFile.season && Number(match[2] || match[4]) === dbFile.episode;

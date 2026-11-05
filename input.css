@@ -418,14 +418,36 @@
         @apply outline-[3px] outline-offset-[3px] outline-white;
     }
 
-    /* The focused card keeps its layout width: the old width expansion made
-       rapid arrow presses fight the smooth scroller and visibly wobble. */
-    .tv-card.is-expanded { @apply z-[5]; }
-    .tv-card.is-expanded .tv-card-info { @apply flex; }
-    .tv-card.is-expanded .tv-card-title { @apply hidden; }
+    /* The 16:9 focus preview is a fixed overlay, so expanding it never changes
+       row geometry or fights horizontal scrolling. */
+    .tv-card.is-previewing { @apply z-[5]; }
+    .tv-card.is-previewing .tv-card-media { outline-color: transparent; }
+    .tv-card.is-previewing .tv-card-title { visibility: hidden; }
 
-    .tv-card.is-expanded.has-backdrop .tv-card-poster { @apply opacity-0; }
-    .tv-card.is-expanded.has-backdrop .tv-card-backdrop { @apply opacity-100; }
+    .tv-card-preview {
+        @apply pointer-events-none fixed z-[80] overflow-hidden rounded-[.45rem] bg-[#1b1b23];
+        opacity: 0;
+        outline: 3px solid #fff;
+        outline-offset: 3px;
+        box-shadow: 0 1.2rem 3.6rem rgba(0, 0, 0, .72);
+        transition:
+            left .24s cubic-bezier(.2, .72, .22, 1),
+            top .24s cubic-bezier(.2, .72, .22, 1),
+            width .24s cubic-bezier(.2, .72, .22, 1),
+            height .24s cubic-bezier(.2, .72, .22, 1),
+            opacity .14s ease-out;
+        will-change: left, top, width, height, opacity;
+    }
+
+    .tv-card-preview.is-open { @apply opacity-100; }
+    .tv-card-preview-media { @apply absolute inset-0 block overflow-hidden; }
+    .tv-card-preview .tv-card-poster,
+    .tv-card-preview .tv-card-backdrop { @apply h-full w-full; }
+    .tv-card-preview .tv-card-backdrop { @apply opacity-0; transition: opacity .3s ease-in-out; }
+    .tv-card-preview.has-backdrop .tv-card-poster { @apply opacity-0; }
+    .tv-card-preview.has-backdrop .tv-card-backdrop { @apply opacity-100; }
+    .tv-card-preview .tv-card-info { @apply flex; }
+    .tv-card-preview .tv-hero-video { @apply z-[1]; }
 
     .tv-card-media .tv-hero-video { @apply z-[1]; }
 

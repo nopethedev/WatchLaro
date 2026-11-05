@@ -93,7 +93,7 @@ function downloadForm(defaultQuality = "1080p") {
  async loadSeason() { await this.work(()=>this.fetchSeason()); },
  tag(s,e) { return 'S'+String(s).padStart(2,'0')+'E'+String(e).padStart(2,'0'); },
  async findTorrent(ep) { this.episode=ep; this.torrentQuery=(this.selected.title || this.selected.name)+(ep===null ? ' '+(this.selected.release_date || '').slice(0,4) : ' '+this.tag(this.season,ep)+(this.type==='tv' ? ' '+this.quality : '')); await this.searchTorrents(); },
- async searchTorrents() { await this.work(async()=>{ this.torrents=await this.request('/api/admin/torrent/search?q='+encodeURIComponent(this.torrentQuery)); }); },
+ async searchTorrents() { await this.work(async()=>{ this.torrents=await this.request('/api/admin/torrent/search?q='+encodeURIComponent(this.torrentQuery)+'&quality='+encodeURIComponent(this.quality)+'&codec=x264'); }); },
  payload(magnet,s=this.season,e=this.episode) { return {magnet,tmdbId:this.selected.id,type:this.type,season:this.type==='tv'?Number(s):null,episode:this.type==='tv'?Number(e):null,quality:this.quality}; },
  async download(torrent) { await this.work(async()=> { if(this.type==='tv' && this.episode===null) throw new Error('Choose an episode first'); const result=await this.request('/api/admin/torrent/create',this.payload(torrent.magnet)); this.message=result.skipped?'Already in library or download queue.':'Download queued. View progress under Media.'; }); },
  async bulk(all) { await this.work(async()=> {
@@ -106,9 +106,11 @@ function downloadForm(defaultQuality = "1080p") {
  for(const [s,e] of targets) {
  this.message='Finding '+this.tag(s,e)+'…';
  try {
- const matches=await this.request('/api/admin/torrent/search?q='+encodeURIComponent(this.selected.name+' '+this.tag(s,e)+' '+this.quality));
+ const matches=await this.request('/api/admin/torrent/search?q='+encodeURIComponent(this.selected.name+' '+this.tag(s,e)+' '+this.quality)+'&quality='+encodeURIComponent(this.quality)+'&codec=x264');
  const pattern=new RegExp('(?:s0*'+s+'e0*'+e+'(?![0-9])|\\b0*'+s+'x0*'+e+'(?![0-9]))','i');
- const pick=matches.filter(t=>t.magnet?.startsWith('magnet:') && pattern.test(t.title) && t.title.toLowerCase().includes(this.quality.toLowerCase())).sort((a,b)=>b.seeds-a.seeds)[0];
+  const valid=matches.filter(t=>t.magnet?.startsWith('magnet:') && pattern.test(t.title) && t.title.toLowerCase().includes(this.quality.toLowerCase()));
+  const preferredCodec=valid.filter(t=>t.codec==='x264');
+  const pick=(preferredCodec.length?preferredCodec:valid).sort((a,b)=>b.seeds-a.seeds)[0];
  if(!pick) { missing.push(this.tag(s,e)); continue; }
  const r=await this.request('/api/admin/torrent/bulk',{items:[this.payload(pick.magnet,s,e)]}); added+=r.added; skipped+=r.skipped;
  } catch(err) { missing.push(this.tag(s,e)+': '+err.message); }

@@ -6,7 +6,22 @@ import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import path from 'path';
 
-import { pickPreferredVideoFile } from './quality.js';
+import { detectCodec, detectQuality, pickPreferredVideoFile } from './quality.js';
+
+const SEARCH_QUALITY_RANK = { '1080p': 0, '720p': 1, 'unknown': 2, '2160p': 3, '480p': 4 };
+const SEARCH_CODEC_RANK = { x264: 0, unknown: 1, av1: 2, x265: 3 };
+
+function searchQualityRank(value, preferred) {
+  if (value === preferred) return 0;
+  if (preferred === '1080p') return SEARCH_QUALITY_RANK[value] ?? 2;
+  return 1;
+}
+
+function searchCodecRank(value, preferred) {
+  if (!preferred) return 0;
+  if (value === preferred) return 0;
+  return SEARCH_CODEC_RANK[value] ?? 1;
+}
 
 // Automatically set binary paths for FFmpeg and FFprobe
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -47,16 +62,21 @@ export class TorrentHelper {
    * @param {Object} [options] - Search options.
    * @param {string} [options.category='All'] - Search category (e.g., 'All', 'Movies', 'TV').
    * @param {number} [options.limit=20] - Max number of results.
+   * @param {string} [options.quality='1080p'] - Preferred resolution.
+   * @param {string} [options.codec] - Preferred video codec, e.g. x264.
    * @param {boolean} [options.getMagnets=true] - Whether to auto-fetch magnet links if missing.
    * @returns {Promise<Array<Object>>} List of normalized search results with magnet links.
    */
   async search(query, options = {}) {
     const category = options.category || 'All';
     const limit = options.limit || 20;
+    const preferredQuality = options.quality || '1080p';
+    const preferredCodec = options.codec || null;
     const getMagnets = options.getMagnets !== false;
 
-    // Composite cache key including query, category, limit, and getMagnets setting
-    const cacheKey = `${query}:${category}:${limit}:${getMagnets}`;
+    // Include the ranking preference in the key: the raw provider hits are the
+    // same, but the order differs between a 1080p and a 2160p search.
+    const cacheKey = `${query}:${category}:${limit}:${getMagnets}:${preferredQuality}:${preferredCodec || ''}`;
     const cachedResults = this.cache.get(cacheKey);
 
     if (cachedResults) {
@@ -93,13 +113,23 @@ export class TorrentHelper {
           peers: parseInt(item.peers, 10) || 0,
           provider: item.provider,
           magnet: magnet || null,
-          time: item.time || null
+          time: item.time || null,
+          quality: detectQuality(item.title),
+          codec: detectCodec(item.title)
         };
       })
     );
 
-    this.cache.set(cacheKey, formattedResults);
-    return formattedResults;
+    const ranked = formattedResults.slice().sort((a, b) => {
+      const quality = searchQualityRank(a.quality, preferredQuality) - searchQualityRank(b.quality, preferredQuality);
+      if (quality) return quality;
+      const codec = searchCodecRank(a.codec, preferredCodec) - searchCodecRank(b.codec, preferredCodec);
+      if (codec) return codec;
+      return b.seeds - a.seeds || b.peers - a.peers;
+    });
+
+    this.cache.set(cacheKey, ranked);
+    return ranked;
   }
 
   /**
@@ -167,7 +197,7 @@ export class TorrentHelper {
 
       try {
         // Rename on destructure so the imported `path` module stays usable here
-        const { onlyVideo = true, selectVideo, preferQuality, metadataTimeoutMs: _timeout, signal: _signal, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
+        const { onlyVideo = true, selectVideo, preferQuality, preferCodec, metadataTimeoutMs: _timeout, signal: _signal, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
 
         const torrent = this.client.add(torrentId, { ...webtorrentOpts, path: downloadPath }, (addedTorrent) => {
           if (settled) return;
@@ -192,7 +222,7 @@ export class TorrentHelper {
               }
             });
             addedTorrent.deselect(0, addedTorrent.pieces.length - 1, false);
-            const selectedVideo = pickPreferredVideoFile(videoFiles, addedTorrent.name, preferQuality);
+            const selectedVideo = pickPreferredVideoFile(videoFiles, addedTorrent.name, preferQuality, preferCodec);
             addedTorrent._laroVideoFiles = selectedVideo ? [selectedVideo] : [];
             // A pause requested before metadata arrived stays paused once it does.
             if (!addedTorrent._laroPaused && selectedVideo) selectedVideo.select();
@@ -368,6 +398,7 @@ export class TorrentHelper {
    * @param {boolean} [options.onlyVideo=true] - Whether to download video files only.
    * @param {boolean} [options.convert=true] - Set to false to skip conversion and only download.
    * @param {string} [options.preferQuality] - Preferred resolution, e.g. 1080p.
+   * @param {string} [options.preferCodec] - Preferred video codec, e.g. x264.
    * @param {Function} [onProgress] - Unified progress callback (receives stage: 'download' | 'convert').
    * @returns {Promise<Object>} Object containing torrent info, main video file, and file paths.
    */
@@ -380,7 +411,7 @@ export class TorrentHelper {
     // 1. Download torrent with video selection enabled
     const torrent = await this.download(
       torrentId,
-      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo, preferQuality: options.preferQuality, metadataTimeoutMs: options.metadataTimeoutMs, signal },
+      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo, preferQuality: options.preferQuality, preferCodec: options.preferCodec, metadataTimeoutMs: options.metadataTimeoutMs, signal },
       (stats) => {
         if (typeof onProgress === 'function') {
           onProgress({ stage: 'download', ...stats });
@@ -402,7 +433,8 @@ export class TorrentHelper {
         || pickPreferredVideoFile(
           torrent.files.filter((file) => this.isVideoFile(file.name) && (!options.selectVideo || options.selectVideo(file.name))),
           torrent.name,
-          options.preferQuality
+          options.preferQuality,
+          options.preferCodec
         )
         || torrent.files[0]
         || null;

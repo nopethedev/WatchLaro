@@ -29,7 +29,7 @@ import nodeCache from 'node-cache';
 import TorrentSearchApi from 'torrent-search-api';
 import WebTorrent from 'webtorrent';
 
-import { detectQuality, filterByQuality, isJunkVideoName } from './quality.js';
+import { detectCodec, detectQuality, filterByCodec, filterByQuality, isJunkVideoName } from './quality.js';
 
 ffmpeg.setFfmpegPath(ffmpegBinary);
 ffmpeg.setFfprobePath(ffprobeBinary);
@@ -393,9 +393,9 @@ function isOrderedMatch(title, queryTokens) {
 /**
  * Rank one search hit. Higher is better.
  * @param {object} item normalized search result
- * @param {{queryTokens:string[], targetQuality:string}} context
+ * @param {{queryTokens:string[], targetQuality:string, targetCodec?:string}} context
  */
-export function scoreResult(item, { queryTokens, targetQuality }) {
+export function scoreResult(item, { queryTokens, targetQuality, targetCodec }) {
   const text = normalizeText(item.title);
   const query = queryTokens.join(' ');
   let score = 0;
@@ -414,6 +414,10 @@ export function scoreResult(item, { queryTokens, targetQuality }) {
   if (isOrderedMatch(item.title, queryTokens)) score += 15;
 
   score += qualityScore(item.quality, targetQuality);
+  if (targetCodec) {
+    if (item.codec === targetCodec) score += 14;
+    else if (item.codec === 'x265' && targetCodec === 'x264') score -= 8;
+  }
   score += SOURCE_SCORES[item.source] ?? 0;
 
   // Freshness: anything released inside ~18 months gets a nudge.
@@ -453,6 +457,7 @@ function normalizeSearchResult(raw) {
     sizeBytes,
     timestamp,
     quality: detectQuality(raw.title),
+    codec: detectCodec(raw.title),
     source: detectSource(raw.title),
     needsTranscode: needsTranscode(raw.title),
     magnet: directMagnet,
@@ -510,6 +515,7 @@ export function clearSearchCache() {
  * @param {number} [options.limit=20] how many results to ask the providers for
  * @param {'score'|'seeders'|'size'|'newest'} [options.sort='score']
  * @param {string} [options.quality='1080p'] preferred resolution
+ * @param {string} [options.codec] preferred video codec, e.g. x264
  * @param {number} [options.minSeeders=0] drop anything below this
  * @param {number} [options.minRelevance=1.0] share of query words that must match
  * @param {boolean} [options.cache=true]
@@ -524,13 +530,14 @@ export async function search(query, options = {}) {
     limit = 20,
     sort = 'score',
     quality = DEFAULT_QUALITY,
+    codec = null,
     minSeeders = 0,
     minRelevance = 1.0,
     cache = true,
   } = options;
 
   const queryTokens = normalizeText(text).split(' ').filter(Boolean);
-  const cacheKey = `${normalizeText(text)}|${category}|${limit}|${sort}|${quality}|${minSeeders}|${minRelevance}`;
+  const cacheKey = `${normalizeText(text)}|${category}|${limit}|${sort}|${quality}|${codec || ''}|${minSeeders}|${minRelevance}`;
 
   if (cache) {
     const cached = searchCache.get(cacheKey);
@@ -549,7 +556,7 @@ export async function search(query, options = {}) {
       if (item.seeders < minSeeders) return false;
       return relevance(item.title, queryTokens) >= minRelevance;
     })
-    .map((item) => ({ ...item, score: scoreResult(item, { queryTokens, targetQuality: quality }) }));
+    .map((item) => ({ ...item, score: scoreResult(item, { queryTokens, targetQuality: quality, targetCodec: codec }) }));
 
   // Resolving magnets is the slow half of a search, so only pay for the top N
   // and silently drop anything that cannot produce one.
@@ -730,6 +737,9 @@ export function pickMainVideoFile(torrent, options = {}) {
   // when any smaller copy exists.
   if (options.preferQuality) {
     candidates = filterByQuality(candidates, torrent?.name, options.preferQuality);
+  }
+  if (options.preferCodec) {
+    candidates = filterByCodec(candidates, torrent?.name, options.preferCodec);
   }
 
   return candidates
@@ -1106,6 +1116,7 @@ export async function releaseIfUnwatched(magnet, { deleteFiles = true, graceMs =
  * @param {boolean} [options.inline=true] inline playback vs attachment
  * @param {'inline'|'attachment'} [options.disposition] overrides inline
  * @param {string} [options.preferQuality] prefer this resolution when a torrent has multiple copies
+ * @param {string} [options.preferCodec] prefer this codec when a torrent has multiple copies
  * @returns {Promise<object|null>} the file that was selected
  */
 export async function stream(magnet, req, res, options = {}) {
@@ -1134,7 +1145,10 @@ export async function stream(magnet, req, res, options = {}) {
   // first few MB instead of waiting for random pieces from the whole file.
   const torrent = await addTorrent(magnet, { job, sequential: true });
 
-  const file = pickMainVideoFile(torrent, { preferQuality: options.preferQuality });
+  const file = pickMainVideoFile(torrent, {
+    preferQuality: options.preferQuality,
+    preferCodec: options.preferCodec,
+  });
   if (!file) {
     console.error(`[stream] no playable video file in ${String(magnet).slice(0, 30)}...`);
     job.status = 'error';
@@ -1330,6 +1344,7 @@ function buildOutputOptions(probe) {
  * @param {boolean} [options.deleteSource=true] remove the raw file afterwards
  * @param {boolean} [options.deleteFilesOnTimeout=true] delete on timeout
  * @param {string} [options.preferQuality] prefer this resolution when a torrent has multiple copies
+ * @param {string} [options.preferCodec] prefer this codec when a torrent has multiple copies
  * @returns {Promise<{file:string, name:string, path:string, outputFile:string,
  *   outputPath:string, infoHash:string, transcodeNeeded:boolean,
  *   transcodeProgress:number}>} `file` is the name of the file in downloads/
@@ -1351,7 +1366,10 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
   try {
     const torrent = await addTorrent(magnet, { job, sequential: true });
 
-    const file = pickMainVideoFile(torrent, { preferQuality: options.preferQuality });
+    const file = pickMainVideoFile(torrent, {
+      preferQuality: options.preferQuality,
+      preferCodec: options.preferCodec,
+    });
     if (!file) throw new Error('no playable video file in this torrent');
 
     // Download only the chosen copy, not every resolution in a season pack.
