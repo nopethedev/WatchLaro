@@ -1125,7 +1125,9 @@ export async function stream(magnet, req, res, options = {}) {
   res.on('close', releaseViewer);
   res.on('finish', releaseViewer);
 
-  const torrent = await addTorrent(magnet, { job });
+  // Stream pieces in order so the frontend demuxer can start after the
+  // first few MB instead of waiting for random pieces from the whole file.
+  const torrent = await addTorrent(magnet, { job, sequential: true });
 
   const file = pickMainVideoFile(torrent);
   if (!file) {

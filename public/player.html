@@ -603,6 +603,11 @@
         <div id="wl-toast" hidden></div>
     </div>
 
+    <!-- Bare import used by the frontend transcoder. The three ESM bundles are
+         vendored under /vendor so the player keeps its no-build setup. -->
+    <script type="importmap">
+        { "imports": { "mediabunny": "/vendor/mediabunny.esm.js" } }
+    </script>
     <script src="/player.js"></script>
 </body>
 

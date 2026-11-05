@@ -33,8 +33,9 @@
  * UI skin: Netflix-style dark player. A real <video> element with NO native
  * controls is driven by the custom bottom bar (play/pause, -10s/+10s, volume,
  * blue scrubber, time-remaining, fullscreen). The backend contract above is
- * unchanged: same params, same endpoints, same postMessage API, same
- * download-then-poll-then-play flow.
+ * unchanged. Series use the frontend live-transcode path (Range requests ->
+ * MediaBunny -> AAC -> MediaSource); the old download/poll flow remains only
+ * as a compatibility fallback.
  */
 
 (function () {
@@ -130,6 +131,10 @@
     var SESSION = 'wl-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
     var switchingServer = false;
     var pendingResume = 0;      // seconds to seek to once metadata is known
+    var frontendHandle = null;  // live MediaBunny/MSE pipeline for series
+    var frontendToken = 0;
+    var frontendActive = false; // pipeline is opening; ignore raw <video> errors
+    var suppressVideoErrors = false;
 
     /* ------------------------------------------------------------------ *
      * helpers
@@ -607,26 +612,6 @@
         return !!(params.season && params.episode);
     }
 
-    /**
-     * Edge and Safari decode DDP5.1/EAC3 natively, so series can skip the
-     * slow download+transcode path and play directly like movies do.
-     * Everything else (Chrome, Firefox, ...) still needs the transcode.
-     * Guarded for environments without navigator.userAgent (default: transcode).
-     */
-    function clientNeedsTranscode() {
-        var ua = (typeof navigator !== 'undefined' && navigator.userAgent)
-            ? String(navigator.userAgent)
-            : '';
-        if (!ua) return true;
-        // Chromium Edge (desktop "Edg/", Android "EdgA/", iOS "EdgiOS/") + legacy EdgeHTML ("Edge/").
-        if (/edg\//i.test(ua) || /edga\//i.test(ua) || /edgios\//i.test(ua) || /edge\//i.test(ua)) return false;
-        // iOS webviews are WebKit under the hood (Chrome/Firefox/Edge on iOS).
-        if (/crios|fxios|edgios/i.test(ua)) return false;
-        // Safari UA contains "Safari"; Chrome's UA does too, so exclude Chrome/Chromium.
-        if (/safari/i.test(ua) && !/chrome|chromium/i.test(ua)) return false;
-        return true;
-    }
-
     function applyTitle() {
         var text = params.title || '';
         if (text && isSeries()) text += ' \u00b7 S' + params.season + 'E' + params.episode;
@@ -663,7 +648,137 @@
         }
     }
 
+    /* ------------------------------------------------------------------ *
+     * frontend DDP5 -> AAC pipeline
+     * ------------------------------------------------------------------ */
+
+    function stopFrontend() {
+        frontendToken += 1;
+        frontendActive = false;
+        var handle = frontendHandle;
+        frontendHandle = null;
+        if (handle) {
+            try { handle.destroy(); } catch (e) { /* already stopped */ }
+        }
+    }
+
+    function frontendFallback(error) {
+        if (!frontendActive) return;
+        frontendActive = false;
+        frontendToken += 1;
+        var handle = frontendHandle;
+        frontendHandle = null;
+        if (handle) {
+            try { handle.destroy(); } catch (e) { /* already stopped */ }
+        }
+        suppressVideoErrors = true;
+
+        var message = error && error.message ? error.message : 'The live conversion could not start';
+        console.warn('[WatchLaro] frontend transcode unavailable: ' + message);
+        showToast('Live conversion failed \u2014 preparing the server fallback');
+
+        // The frontend path is the fast path. This full-episode download exists
+        // only for browsers without the required MediaSource/WebCodecs pieces.
+        startDownload().then(function (started) {
+            if (!started) {
+                suppressVideoErrors = false;
+                fail('Live conversion failed: ' + message);
+            }
+        });
+    }
+
+    function onFrontendProgress(info) {
+        if (!frontendActive || state !== 'preparing') return;
+        var stage = 'Connecting to the live stream\u2026';
+        if (info.phase === 'metadata') stage = 'Reading stream details';
+        else if (info.phase === 'opening') stage = 'Starting live conversion';
+        else if (info.phase === 'buffering') stage = 'Buffering the first seconds';
+        else if (info.phase === 'transcode') stage = 'Converting DDP5 to AAC';
+        else if (info.phase === 'error') stage = 'Conversion stopped';
+
+        showOverlay({
+            heading: 'Grabbing popcorn\u2026',
+            sub: 'Playing while the audio is converted in your browser',
+            stage: stage,
+            percent: typeof info.percent === 'number' ? info.percent : null
+        });
+    }
+
+    function onFrontendReady(meta) {
+        frontendActive = false;
+        state = 'ready';
+        hideOverlay();
+        resetControlsUI();
+
+        // The live pipeline starts at zero. Only resume when the first
+        // look-ahead window already covers the saved position; a jump far
+        // ahead would force a long catch-up conversion before any picture.
+        var resumeAt = pendingResume;
+        pendingResume = 0;
+        if (resumeAt > 0) {
+            var buffered = el.video.buffered;
+            var covered = buffered.length && buffered.end(buffered.length - 1) >= resumeAt;
+            if (covered || (meta && meta.mode === 'direct')) {
+                try { el.video.currentTime = resumeAt; } catch (e) { /* not seekable yet */ }
+                updateSeekUI();
+            }
+        }
+
+        if (opts_autoplay()) {
+            var attempt = el.video.play();
+            if (attempt && typeof attempt.catch === 'function') {
+                attempt.catch(function () { /* browser blocked autoplay, fine */ });
+            }
+        }
+        startHeartbeat();
+    }
+
+    function startFrontendPlayback() {
+        stopFrontend();
+        var token = ++frontendToken;
+        frontendActive = true;
+        state = 'preparing';
+        showOverlay({
+            heading: 'Grabbing popcorn\u2026',
+            sub: 'Playing while the audio is converted in your browser',
+            stage: 'Connecting to the live stream\u2026',
+            percent: null
+        });
+
+        import('/player-transcode.js').then(function (mod) {
+            if (token !== frontendToken) return;
+            try {
+                frontendHandle = mod.start({
+                    video: el.video,
+                    url: streamUrl(params.id, params.season, params.episode),
+                    onProgress: function (info) {
+                        if (token === frontendToken) onFrontendProgress(info);
+                    },
+                    onReady: function (meta) {
+                        if (token === frontendToken) onFrontendReady(meta);
+                    },
+                    onError: function (error) {
+                        if (token !== frontendToken) return;
+                        if (state === 'ready') {
+                            stopFrontend();
+                            fail('The live audio conversion stopped: '
+                                + (error && error.message ? error.message : 'unknown error'));
+                            return;
+                        }
+                        frontendFallback(error);
+                    }
+                });
+            } catch (error) {
+                if (token === frontendToken) frontendFallback(error);
+            }
+        }).catch(function (error) {
+            if (token === frontendToken) frontendFallback(error);
+        });
+    }
+
     function playVideo(subtitles) {
+        stopFrontend();
+        suppressVideoErrors = false;
         state = 'ready';
         hideOverlay();
 
@@ -888,6 +1003,8 @@
 
         stopPolling();
         stopHeartbeat();
+        stopFrontend();
+        suppressVideoErrors = false;
         setDownloadButton('idle');
         el.video.removeAttribute('src');
         el.video.load();
@@ -913,18 +1030,14 @@
         });
         state = 'preparing';
 
-        var needsTranscode = clientNeedsTranscode();
         console.info('[WatchLaro] load: ' + (isSeries() ? 'series' : 'movie')
-            + ' -> ' + (isSeries() && needsTranscode ? 'download+transcode path' : 'direct play path')
-            + ' (UA: ' + ((typeof navigator !== 'undefined' && navigator.userAgent) || 'unknown') + ')');
+            + ' -> ' + (isSeries() ? 'frontend live transcode path' : 'direct play path'));
 
-        if (isSeries() && needsTranscode) {
-            // Series go through the download+transcode path first, then play.
-            // Edge/Safari skip this: they play DDP5.1/EAC3 natively. The manual
-            // Download button stays as the fallback if direct play fails.
-            startDownload().then(function (started) {
-                if (!started) playVideo();
-            });
+        if (isSeries()) {
+            // Read the torrent lazily over Range requests, decode DDP5 in a
+            // worker, encode AAC, and feed fragmented MP4 to MediaSource. No
+            // full download and no server-side transcode.
+            startFrontendPlayback();
         } else {
             playVideo();
         }
@@ -946,6 +1059,8 @@
     function stop() {
         stopPolling();
         stopHeartbeat();
+        stopFrontend();
+        suppressVideoErrors = false;
         cancelBufferOverlay();
         el.video.pause();
         el.video.removeAttribute('src');
@@ -1436,6 +1551,7 @@
     });
 
     el.video.addEventListener('error', function () {
+        if (frontendActive || suppressVideoErrors) return;
         var code = el.video.error ? el.video.error.code : 0;
         if (code === 0) return; // cleared source, not a real failure
         var messages = {
@@ -1565,6 +1681,7 @@
     window.addEventListener('beforeunload', function () {
         stopPolling();
         stopHeartbeat();
+        stopFrontend();
     });
 
     // Handy when the player is included as a script rather than an iframe.

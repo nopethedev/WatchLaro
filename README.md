@@ -14,8 +14,8 @@ A self-hostable alternative to Jellyfin, built around downloading and sharing me
 - Minimal frontend for browsing what's already downloaded
 - Share movies directly from the admin panel.
 - Working on demand streaming with custom player.
+- Instant series playback on modern browsers: the player reads the torrent over HTTP Range requests, decodes DDP5/E-AC-3 to AAC in the browser, and feeds fragmented MP4 to MediaSource. No full-episode download and no HLS/TS output. Browsers without the required codecs automatically fall back to the server download/transcode path.
 
-It will download the whole episode before playing, but if your on Edge/Safari it will play instantly due to their support of DDP5.
 Everything else below is planned but not yet available.
 
 ## Roadmap
