@@ -29,6 +29,8 @@ import nodeCache from 'node-cache';
 import TorrentSearchApi from 'torrent-search-api';
 import WebTorrent from 'webtorrent';
 
+import { detectQuality, filterByQuality, isJunkVideoName } from './quality.js';
+
 ffmpeg.setFfmpegPath(ffmpegBinary);
 ffmpeg.setFfprobePath(ffprobeBinary);
 
@@ -336,15 +338,6 @@ const SOURCE_SCORES = {
 };
 
 const JUNK_TITLE_RE = /\b(xxx|pron|porn|camrip\s+trial|trailer\s*\d*\s*min|full\s+movie\s+inside)\b/i;
-
-function detectQuality(title) {
-  const text = String(title || '').toLowerCase();
-  if (/\b(2160p|4k|uhd)\b/.test(text)) return '2160p';
-  if (/\b1080[pi]\b/.test(text)) return '1080p';
-  if (/\b720[pi]\b/.test(text)) return '720p';
-  if (/\b(480[pi]|sd)\b/.test(text)) return '480p';
-  return 'unknown';
-}
 
 function detectSource(title) {
   const text = String(title || '').toLowerCase();
@@ -718,7 +711,7 @@ function scoreTorrentFile(file, poolSize) {
  * The one file a player should actually receive.
  * @returns {object|null} a webtorrent File
  */
-export function pickMainVideoFile(torrent) {
+export function pickMainVideoFile(torrent, options = {}) {
   const files = torrent?.files || [];
   if (!files.length) return null;
 
@@ -726,20 +719,31 @@ export function pickMainVideoFile(torrent) {
   const pool = videos.length
     ? videos
     : files.filter((file) => !IGNORED_EXTENSIONS.has(path.extname(file.name).toLowerCase()));
-  const candidates = pool.length ? pool : files;
+  let candidates = pool.length ? pool : files;
+
+  // A release can include a sample next to the episode. Prefer real files.
+  const clean = candidates.filter((file) => !isJunkVideoName(file.name));
+  if (clean.length) candidates = clean;
+
+  // A 2160p copy can be several times larger than the 1080p one. Select the
+  // preferred resolution first instead of letting file size win, and avoid 4K
+  // when any smaller copy exists.
+  if (options.preferQuality) {
+    candidates = filterByQuality(candidates, torrent?.name, options.preferQuality);
+  }
 
   return candidates
     .map((file) => ({ file, score: scoreTorrentFile(file, candidates.length) }))
     .sort((a, b) => b.score - a.score)[0]?.file ?? null;
 }
 
-/** Deselect everything, then select the video files plus subtitle sidecars. */
-function selectVideoFilesOnly(torrent) {
-  torrent.files.forEach((file) => file.deselect());
-  const wanted = torrent.files.filter((file) => isVideoFile(file.name) || isSubtitleFile(file.name));
-  wanted.forEach((file) => file.select());
-  const subCount = wanted.filter((file) => isSubtitleFile(file.name)).length;
-  if (subCount > 0) console.log(`[download] keeping ${subCount} subtitle sidecar(s)`);
+/** Deselect everything, then select the chosen video plus subtitle sidecars. */
+function selectVideoAndSubtitles(torrent, file) {
+  torrent.files.forEach((other) => other.deselect());
+  file.select();
+  torrent.files.forEach((other) => {
+    if (isSubtitleFile(other.name)) other.select();
+  });
 }
 
 /** Deselect everything, then select exactly one file. */
@@ -780,10 +784,10 @@ function snapshot(job) {
   let peers = job.peers;
 
   if (torrent && !job.done) {
-    // Measure over the video files only - torrent.progress also counts the
-    // deselected junk that will never download and stalls the bar at 97%.
+    // Measure the file this job actually selected. A quality pack can contain
+    // 4K copies that were never selected and must not drag progress down.
     const videos = files.filter((file) => isVideoFile(file.name));
-    const pool = videos.length ? videos : files;
+    const pool = job.file ? [job.file] : (videos.length ? videos : files);
     const total = pool.reduce((sum, file) => sum + file.length, 0);
     const got = pool.reduce((sum, file) => sum + file.downloaded, 0);
 
@@ -1101,6 +1105,7 @@ export async function releaseIfUnwatched(magnet, { deleteFiles = true, graceMs =
  * @param {number} [options.timeoutMin=10] idle minutes before the job is cancelled
  * @param {boolean} [options.inline=true] inline playback vs attachment
  * @param {'inline'|'attachment'} [options.disposition] overrides inline
+ * @param {string} [options.preferQuality] prefer this resolution when a torrent has multiple copies
  * @returns {Promise<object|null>} the file that was selected
  */
 export async function stream(magnet, req, res, options = {}) {
@@ -1129,7 +1134,7 @@ export async function stream(magnet, req, res, options = {}) {
   // first few MB instead of waiting for random pieces from the whole file.
   const torrent = await addTorrent(magnet, { job, sequential: true });
 
-  const file = pickMainVideoFile(torrent);
+  const file = pickMainVideoFile(torrent, { preferQuality: options.preferQuality });
   if (!file) {
     console.error(`[stream] no playable video file in ${String(magnet).slice(0, 30)}...`);
     job.status = 'error';
@@ -1324,6 +1329,7 @@ function buildOutputOptions(probe) {
  * @param {string} [options.outputName] override the output file name
  * @param {boolean} [options.deleteSource=true] remove the raw file afterwards
  * @param {boolean} [options.deleteFilesOnTimeout=true] delete on timeout
+ * @param {string} [options.preferQuality] prefer this resolution when a torrent has multiple copies
  * @returns {Promise<{file:string, name:string, path:string, outputFile:string,
  *   outputPath:string, infoHash:string, transcodeNeeded:boolean,
  *   transcodeProgress:number}>} `file` is the name of the file in downloads/
@@ -1345,10 +1351,11 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
   try {
     const torrent = await addTorrent(magnet, { job, sequential: true });
 
-    selectVideoFilesOnly(torrent);
-
-    const file = pickMainVideoFile(torrent);
+    const file = pickMainVideoFile(torrent, { preferQuality: options.preferQuality });
     if (!file) throw new Error('no playable video file in this torrent');
+
+    // Download only the chosen copy, not every resolution in a season pack.
+    selectVideoAndSubtitles(torrent, file);
 
     job.file = file;
     job.fileName = file.name;
@@ -1363,7 +1370,7 @@ export async function downloadAndTranscode(magnet, timeoutMin = DEFAULT_TIMEOUT_
         const onDownload = () => {
           const files = torrent.files || [];
           const videos = files.filter((f) => isVideoFile(f.name));
-          const pool = videos.length ? videos : files;
+          const pool = job.file ? [job.file] : (videos.length ? videos : files);
           const total = pool.reduce((sum, f) => sum + f.length, 0);
           const got = pool.reduce((sum, f) => sum + (f.downloaded || 0), 0);
           if (total > 0) logMilestone(job, 'download', (got / total) * 100);

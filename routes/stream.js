@@ -29,6 +29,16 @@ const candidateCache = new NodeCache({ stdTTL: 3600, checkPeriod: 600 });
 const keyFor = (id, season, episode) =>
     season && episode ? `tv:${id}:${season}:${episode}` : `movie:${id}`;
 
+/** 1080p first; if unavailable, keep 720p/unknown ahead of 4K. */
+const SERIES_QUALITY_RANK = { '1080p': 0, '720p': 1, 'unknown': 2, '2160p': 3, '480p': 4 };
+function prioritizeSeriesQuality(results) {
+    return results.slice().sort((a, b) => {
+        const quality = (SERIES_QUALITY_RANK[a.quality] ?? 2) - (SERIES_QUALITY_RANK[b.quality] ?? 2);
+        if (quality) return quality;
+        return (b.score || 0) - (a.score || 0) || (b.seeders || 0) - (a.seeders || 0);
+    });
+}
+
 /** How many alternative torrents a title keeps for the server switcher. */
 const MAX_CANDIDATES = 10;
 
@@ -71,7 +81,8 @@ async function resolveCandidates(id, season, episode) {
         console.log(`[search] TMDB query: "${query}" (${key})`);
         let results = [];
         try {
-            results = await downloader.search(query, isSeries ? { limit: 20, sort: 'seeders' } : { limit: 20 });
+            results = await downloader.search(query, isSeries ? { limit: 20, quality: '1080p' } : { limit: 20 });
+            if (isSeries) results = prioritizeSeriesQuality(results);
         } catch (err) {
             console.log(`[search] "${query}" failed: ${err.message}`);
             continue;
@@ -243,7 +254,10 @@ async function handleStream(req, res) {
         } catch { /* fall through to live torrent streaming */ }
 
         // Idle timeout is 10m here; the downloader default is configurable via DOWNLOADER_TIMEOUT_MIN.
-        await downloader.stream(magnet, req, res, { timeoutMin: 10 });
+        await downloader.stream(magnet, req, res, {
+            timeoutMin: 10,
+            preferQuality: season && episode ? '1080p' : undefined,
+        });
     } catch (err) {
         console.error('[stream]', err.message);
         if (!res.headersSent) res.status(500).json({ status: 'error', error: err.message });
@@ -314,7 +328,9 @@ async function handleDownload(req, res) {
         if (existing?.done && existing?.outputFile) return res.json({ ok: true, ...existing });
 
         // Don't await: this runs for minutes, the player polls progress.
-        downloader.downloadAndTranscode(magnet, 10).catch((err) => {
+        downloader.downloadAndTranscode(magnet, 10, {
+            preferQuality: season && episode ? '1080p' : undefined,
+        }).catch((err) => {
             console.error('[stream/download]', err.message);
         });
 

@@ -92,7 +92,7 @@ function downloadForm(defaultQuality = "1080p") {
  async fetchSeason() { const info=await this.request('/api/tv/season/info',{q:this.selected.id,season:this.season}); this.episodes=info.episodes || []; this.checked=[]; this.torrents=[]; this.episode=null; },
  async loadSeason() { await this.work(()=>this.fetchSeason()); },
  tag(s,e) { return 'S'+String(s).padStart(2,'0')+'E'+String(e).padStart(2,'0'); },
- async findTorrent(ep) { this.episode=ep; this.torrentQuery=(this.selected.title || this.selected.name)+(ep===null ? ' '+(this.selected.release_date || '').slice(0,4) : ' '+this.tag(this.season,ep)); await this.searchTorrents(); },
+ async findTorrent(ep) { this.episode=ep; this.torrentQuery=(this.selected.title || this.selected.name)+(ep===null ? ' '+(this.selected.release_date || '').slice(0,4) : ' '+this.tag(this.season,ep)+(this.type==='tv' ? ' '+this.quality : '')); await this.searchTorrents(); },
  async searchTorrents() { await this.work(async()=>{ this.torrents=await this.request('/api/admin/torrent/search?q='+encodeURIComponent(this.torrentQuery)); }); },
  payload(magnet,s=this.season,e=this.episode) { return {magnet,tmdbId:this.selected.id,type:this.type,season:this.type==='tv'?Number(s):null,episode:this.type==='tv'?Number(e):null,quality:this.quality}; },
  async download(torrent) { await this.work(async()=> { if(this.type==='tv' && this.episode===null) throw new Error('Choose an episode first'); const result=await this.request('/api/admin/torrent/create',this.payload(torrent.magnet)); this.message=result.skipped?'Already in library or download queue.':'Download queued. View progress under Media.'; }); },

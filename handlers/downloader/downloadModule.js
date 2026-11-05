@@ -6,6 +6,8 @@ import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import path from 'path';
 
+import { pickPreferredVideoFile } from './quality.js';
+
 // Automatically set binary paths for FFmpeg and FFprobe
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 ffmpeg.setFfprobePath(ffprobeInstaller.path);
@@ -165,7 +167,7 @@ export class TorrentHelper {
 
       try {
         // Rename on destructure so the imported `path` module stays usable here
-        const { onlyVideo = true, selectVideo, metadataTimeoutMs: _timeout, signal: _signal, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
+        const { onlyVideo = true, selectVideo, preferQuality, metadataTimeoutMs: _timeout, signal: _signal, path: downloadPath = path.join(process.cwd(), 'downloads'), ...webtorrentOpts } = options;
 
         const torrent = this.client.add(torrentId, { ...webtorrentOpts, path: downloadPath }, (addedTorrent) => {
           if (settled) return;
@@ -190,9 +192,10 @@ export class TorrentHelper {
               }
             });
             addedTorrent.deselect(0, addedTorrent.pieces.length - 1, false);
-            addedTorrent._laroVideoFiles = videoFiles;
+            const selectedVideo = pickPreferredVideoFile(videoFiles, addedTorrent.name, preferQuality);
+            addedTorrent._laroVideoFiles = selectedVideo ? [selectedVideo] : [];
             // A pause requested before metadata arrived stays paused once it does.
-            if (!addedTorrent._laroPaused) videoFiles.forEach((file) => file.select());
+            if (!addedTorrent._laroPaused && selectedVideo) selectedVideo.select();
           }
 
           // Setup progress updates if listener callback provided
@@ -364,6 +367,7 @@ export class TorrentHelper {
    * @param {string} [options.outputPath] - Optional custom output file path.
    * @param {boolean} [options.onlyVideo=true] - Whether to download video files only.
    * @param {boolean} [options.convert=true] - Set to false to skip conversion and only download.
+   * @param {string} [options.preferQuality] - Preferred resolution, e.g. 1080p.
    * @param {Function} [onProgress] - Unified progress callback (receives stage: 'download' | 'convert').
    * @returns {Promise<Object>} Object containing torrent info, main video file, and file paths.
    */
@@ -376,7 +380,7 @@ export class TorrentHelper {
     // 1. Download torrent with video selection enabled
     const torrent = await this.download(
       torrentId,
-      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo, metadataTimeoutMs: options.metadataTimeoutMs, signal },
+      { path: downloadDir, onlyVideo, selectVideo: options.selectVideo, preferQuality: options.preferQuality, metadataTimeoutMs: options.metadataTimeoutMs, signal },
       (stats) => {
         if (typeof onProgress === 'function') {
           onProgress({ stage: 'download', ...stats });
@@ -394,10 +398,14 @@ export class TorrentHelper {
     // 2. Metadata is available as soon as the torrent is added — notify the
     // caller so it can persist the real name, path and infoHash.
     if (typeof options.onReady === 'function') {
-      const readyVideoFiles = torrent.files
-        .filter((file) => this.isVideoFile(file.name) && (!options.selectVideo || options.selectVideo(file.name)))
-        .sort((a, b) => b.length - a.length);
-      const readyVideoFile = readyVideoFiles[0] || torrent.files[0] || null;
+      const readyVideoFile = torrent._laroVideoFiles?.[0]
+        || pickPreferredVideoFile(
+          torrent.files.filter((file) => this.isVideoFile(file.name) && (!options.selectVideo || options.selectVideo(file.name))),
+          torrent.name,
+          options.preferQuality
+        )
+        || torrent.files[0]
+        || null;
 
       try {
         await options.onReady({
@@ -422,14 +430,15 @@ export class TorrentHelper {
     }
     ensureNotCancelled();
 
-    // 4. Find video files and select the largest one
-    const videoFiles = torrent._laroVideoFiles || torrent.files.filter((file) => this.isVideoFile(file.name));
+    // 4. Use the one quality-aware file selected when metadata arrived.
+    const videoFiles = torrent._laroVideoFiles?.length
+      ? torrent._laroVideoFiles
+      : torrent.files.filter((file) => this.isVideoFile(file.name));
 
     if (videoFiles.length === 0) {
       throw new Error('No video files found in the downloaded torrent.');
     }
 
-    videoFiles.sort((a, b) => b.length - a.length);
     const mainVideoFile = videoFiles[0];
 
     // 5. Resolve input file path

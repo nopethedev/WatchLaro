@@ -92,6 +92,7 @@ async function startTorrentDownload(dbFile, state = null) {
       signal,
       downloadDir,
       outputPath: path.join(downloadsDir, `${dbFile.uuid}.mp4`),
+      preferQuality: dbFile.quality || '1080p',
       selectVideo: dbFile.type === 'tv' ? (name) => {
         const match = /s(\d+)e(\d+)(?!\d)|\b(\d+)x(\d+)(?!\d)/i.exec(name);
         return match && Number(match[1] || match[3]) === dbFile.season && Number(match[2] || match[4]) === dbFile.episode;
