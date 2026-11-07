@@ -16,6 +16,7 @@
             <div class="w-full justify-items-center">
                 <div class="w-100 h-52 bg-gray-900 mt-4 rounded-md justify-items-center p-4">
                     <form action="/login" method="post" class="w-full h-full ">
+                        <input type="hidden" name="next" value="<%= typeof next !== 'undefined' ? next : '' %>">
                         <div class="w-full h-full flex items-center flex-col">
                             <h1 x-data="{ greetings: ['👋 Welcome back!', '🍿 Grab some popcorn!', '🎬 Ready to watch?', '🚀 Login to start.'] }"
                                 x-text="greetings[Math.floor(Math.random() * greetings.length)]"

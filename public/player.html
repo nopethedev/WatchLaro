@@ -298,8 +298,8 @@
 
         #wl-tv-full svg { width: 1rem; height: 1rem; }
 
-        /* ---- options sheet (server picker) ---- */
-        #wl-tv-sheet {
+        /* ---- options / subtitles sheets ---- */
+        #wl-tv-sheet, #wl-subs-sheet {
             position: absolute;
             inset: 0;
             z-index: 18;
@@ -307,6 +307,23 @@
             place-items: center;
             padding: 3rem;
             background: rgba(0, 0, 0, .7);
+        }
+
+        #wl-subs-sheet { z-index: 19; }
+
+        .wl-sub-list {
+            max-height: min(18rem, 42vh);
+            overflow-y: auto;
+            align-content: flex-start;
+        }
+
+        .wl-sub-list .wl-sheet-server {
+            max-width: 100%;
+            overflow: hidden;
+            border-radius: .55rem;
+            text-align: left;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .wl-sheet-card {
@@ -429,8 +446,9 @@
                 margin-top: .85rem;
             }
             .wl-tv-pill { flex: 0 0 auto; font-size: .7rem; padding: .35rem .65rem; }
-            #wl-tv-sheet { padding: .75rem; }
+            #wl-tv-sheet, #wl-subs-sheet { padding: .75rem; }
             .wl-sheet-card { width: 100%; padding: 1.2rem 1.15rem 1rem; border-radius: .8rem; }
+            .wl-sub-list { max-height: 40vh; }
             .wl-sheet-title { font-size: 1.25rem; }
             .wl-sheet-status { font-size: .8rem; }
             .wl-sheet-server { font-size: .8rem; padding: .4rem .8rem; }
@@ -584,6 +602,19 @@
                         </svg>
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Subtitles sheet: local sidecars and OpenSubtitles tracks -->
+        <div id="wl-subs-sheet" hidden>
+            <div class="wl-sheet-card" role="dialog" aria-modal="true" aria-label="Subtitles">
+                <p class="wl-sheet-kicker">Accessibility</p>
+                <h2 class="wl-sheet-title">Subtitles</h2>
+                <p class="wl-sheet-status" id="wl-subs-status">Loading tracks…</p>
+                <div class="wl-sheet-list wl-sub-list" id="wl-subs-list"></div>
+                <p class="wl-sheet-hint">Local subtitle files appear first. Online tracks are supplied by
+                    OpenSubtitles when the server has an API key configured.</p>
+                <button id="wl-subs-close" class="wl-sheet-close" type="button">Close</button>
             </div>
         </div>
 

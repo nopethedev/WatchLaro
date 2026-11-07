@@ -101,6 +101,10 @@
         tvSheet: document.getElementById('wl-tv-sheet'),
         tvSourceList: document.getElementById('wl-tv-source-list'),
         tvSheetClose: document.getElementById('wl-tv-sheet-close'),
+        subsSheet: document.getElementById('wl-subs-sheet'),
+        subsList: document.getElementById('wl-subs-list'),
+        subsStatus: document.getElementById('wl-subs-status'),
+        subsClose: document.getElementById('wl-subs-close'),
         tvSubs: document.getElementById('wl-tv-subs'),
         tvMute: document.getElementById('wl-tv-mute'),
         tvFull: document.getElementById('wl-tv-full'),
@@ -122,8 +126,16 @@
     var idleTimer = null;
     var isScrubbing = false;
     var bufferOverlayTimer = null;
-    var subtitleTracks = [];   // [{ name, lang }] from info.subtitles, attached at ready
+    var subtitleTracks = [];   // local sidecars + online tracks, attached at ready
     var subtitleIndex = -1;    // -1 = off, else index into subtitleTracks
+    var onlineSubtitleTracks = [];
+    var onlineSubtitlesLoaded = false;
+    var onlineSubtitlesLoading = false;
+    var onlineSubtitlesPromise = null;
+    var onlineSubtitlesMessage = '';
+    var onlineRequestId = 0;
+    var subsSheetOpen = false;
+    var historyRecordedFor = '';
 
     // The ten-foot layout is the default everywhere, with a responsive
     // compact mode for phones. Use ?tvui=0 to fall back to the classic skin.
@@ -475,9 +487,23 @@
 
     function subtitleLabel(track, index) {
         var lang = String(track.lang || '').toLowerCase();
+        if (track.source === 'opensubtitles') {
+            var language = SUBTITLE_LABELS[lang] || 'Online';
+            var release = String(track.name || '').trim();
+            return release ? language + ' \u00b7 ' + release.slice(0, 64) : language;
+        }
         if (SUBTITLE_LABELS[lang]) return SUBTITLE_LABELS[lang];
         if (track.name) return String(track.name);
         return 'Subtitle ' + (index + 1);
+    }
+
+    function subtitleKey(track) {
+        if (!track) return '';
+        return track.fileId ? 'file:' + track.fileId : 'local:' + (track.name || '') + ':' + (track.lang || '');
+    }
+
+    function onlineSubtitleUrl(track) {
+        return API_BASE + '/stream/subtitles/file/' + encode(track.fileId);
     }
 
     /**
@@ -488,7 +514,7 @@
     function subtitleQuery(track) {
         var lang = String(track.lang || '').toLowerCase();
         var shared = subtitleTracks.filter(function (t) {
-            return String(t.lang || '').toLowerCase() === lang;
+            return t.source !== 'opensubtitles' && String(t.lang || '').toLowerCase() === lang;
         }).length;
         if (lang && lang !== 'unknown' && shared === 1) return lang;
         return track.name || lang || '';
@@ -501,8 +527,9 @@
         } catch (e) { /* textTracks unavailable, the toast still tells the story */ }
     }
 
-    /** Rebuild the <track> list from info.subtitles. Starts with all tracks off. */
+    /** Rebuild the <track> list, preserving a selected track when possible. */
     function attachSubtitles(list) {
+        var previous = subtitleIndex >= 0 ? subtitleTracks[subtitleIndex] : null;
         subtitleTracks = Array.isArray(list) ? list.slice(0) : [];
         subtitleIndex = -1;
         if (!el.video) return;
@@ -513,11 +540,128 @@
             node.kind = 'subtitles';
             node.label = subtitleLabel(track, index);
             node.srclang = String(track.lang || '');
-            node.src = subsUrl(params.id, params.season, params.episode, subtitleQuery(track));
+            node.src = track.fileId
+                ? onlineSubtitleUrl(track)
+                : subsUrl(params.id, params.season, params.episode, subtitleQuery(track));
             el.video.appendChild(node);
             setTrackMode(index, 'disabled');
         });
+        if (previous) {
+            var found = -1;
+            for (var j = 0; j < subtitleTracks.length; j++) {
+                if (subtitleKey(subtitleTracks[j]) === subtitleKey(previous)) { found = j; break; }
+            }
+            if (found >= 0) {
+                subtitleIndex = found;
+                setTrackMode(found, 'showing');
+            }
+        }
         setTvSubtitleLabel();
+    }
+
+    /** Fetch online tracks once, then merge them into the player's track list. */
+    function loadOnlineSubtitles() {
+        if (onlineSubtitlesLoaded || onlineSubtitlesLoading || !params.id) return onlineSubtitlesPromise;
+        onlineSubtitlesLoading = true;
+        var requestId = ++onlineRequestId;
+        var query = new URLSearchParams();
+        if (params.title) query.set('title', params.title);
+        var url = API_BASE + '/stream/subtitles/' + buildPath(params.id, params.season, params.episode)
+            + (query.toString() ? '?' + query.toString() : '');
+
+        onlineSubtitlesPromise = fetch(url, { headers: { Accept: 'application/json' } })
+            .then(function (response) {
+                if (!response.ok) throw new Error('subtitle search failed: ' + response.status);
+                return response.json();
+            })
+            .then(function (data) {
+                if (requestId !== onlineRequestId) return;
+                onlineSubtitlesLoaded = true;
+                onlineSubtitleTracks = Array.isArray(data.tracks) ? data.tracks : [];
+                if (data.configured === false) onlineSubtitlesMessage = 'Online subtitles are not configured.';
+                var merged = subtitleTracks.filter(function (track) { return track.source !== 'opensubtitles'; })
+                    .concat(onlineSubtitleTracks);
+                attachSubtitles(merged);
+                if (subsSheetOpen) renderSubtitleList();
+            })
+            .catch(function () {
+                if (requestId !== onlineRequestId) return;
+                onlineSubtitlesLoaded = true;
+                onlineSubtitlesMessage = 'Online subtitles are unavailable right now.';
+                if (subsSheetOpen) renderSubtitleList();
+            })
+            .then(function () {
+                if (requestId === onlineRequestId) onlineSubtitlesLoading = false;
+            });
+        return onlineSubtitlesPromise;
+    }
+
+    function renderSubtitleList() {
+        if (!el.subsList) return;
+        el.subsList.innerHTML = '';
+
+        var options = [{ label: 'Off', index: -1 }];
+        subtitleTracks.forEach(function (track, index) {
+            options.push({ label: subtitleLabel(track, index), index: index });
+        });
+
+        options.forEach(function (option) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'wl-sheet-server' + (option.index === subtitleIndex ? ' is-active' : '');
+            button.textContent = (option.index === subtitleIndex ? '\u2713 ' : '') + option.label;
+            button.addEventListener('click', function () {
+                setSubtitle(option.index);
+                closeSubsSheet();
+            });
+            el.subsList.appendChild(button);
+        });
+
+        if (el.subsStatus) {
+            if (onlineSubtitlesLoading) {
+                el.subsStatus.textContent = 'Searching OpenSubtitles\u2026';
+            } else if (onlineSubtitleTracks.length) {
+                el.subsStatus.textContent = onlineSubtitleTracks.length + ' online track'
+                    + (onlineSubtitleTracks.length === 1 ? '' : 's') + ' found.';
+            } else if (onlineSubtitlesMessage) {
+                el.subsStatus.textContent = onlineSubtitlesMessage;
+            } else {
+                el.subsStatus.textContent = subtitleTracks.length ? 'Choose a track.' : 'No subtitles available for this title.';
+            }
+        }
+    }
+
+    function setSubtitle(index) {
+        setTrackMode(subtitleIndex, 'disabled');
+        subtitleIndex = index;
+        if (index >= 0) setTrackMode(index, 'showing');
+        setTvSubtitleLabel();
+        showToast(index >= 0 ? 'Subtitles: ' + subtitleLabel(subtitleTracks[index], index) : 'Subtitles off');
+    }
+
+    function openSubsSheet() {
+        if (!el.subsSheet) return;
+        if (tvSheetOpen) closeTvSheet();
+        subsSheetOpen = true;
+        el.subsSheet.hidden = false;
+        renderSubtitleList();
+        loadOnlineSubtitles();
+        pokeBars();
+        var buttons = subsSheetButtons();
+        var active = el.subsList && el.subsList.querySelector('.is-active');
+        focusTv(active || buttons[0] || el.subsClose);
+    }
+
+    function closeSubsSheet() {
+        if (!subsSheetOpen) return;
+        subsSheetOpen = false;
+        if (el.subsSheet) el.subsSheet.hidden = true;
+        focusTv(TV_MODE ? el.tvSubs : el.subs);
+    }
+
+    function subsSheetButtons() {
+        if (!el.subsSheet) return [];
+        return Array.prototype.slice.call(el.subsSheet.querySelectorAll('button'));
     }
 
     /** CC button: off -> track 1 -> track 2 -> ... -> off, with a toast each step. */
@@ -782,7 +926,10 @@
         state = 'ready';
         hideOverlay();
 
-        if (Array.isArray(subtitles)) attachSubtitles(subtitles);
+        if (Array.isArray(subtitles)) {
+            attachSubtitles(subtitles.concat(onlineSubtitleTracks));
+        }
+        loadOnlineSubtitles();
 
         if (!el.video.src || el.video.src.indexOf(streamUrl(params.id, params.season, params.episode)) === -1) {
             el.video.src = streamUrl(params.id, params.season, params.episode);
@@ -980,6 +1127,29 @@
         heartbeatTimer = setInterval(sendHeartbeat, 60000);
     }
 
+    /** Record one viewing per title/episode for the selected profile. */
+    function recordWatchHistory() {
+        if (!params.id) return;
+        var key = buildPath(params.id, params.season, params.episode);
+        if (historyRecordedFor === key) return;
+        historyRecordedFor = key;
+        fetch(API_BASE + '/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+                type: isSeries() ? 'tv' : 'movie',
+                id: Number(params.id),
+                title: params.title || undefined,
+                season: params.season || undefined,
+                episode: params.episode || undefined
+            })
+        }).then(function (response) {
+            if (!response.ok) historyRecordedFor = '';
+        }).catch(function () {
+            historyRecordedFor = '';
+        });
+    }
+
     function stopHeartbeat() {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
@@ -991,6 +1161,7 @@
 
     function load(next) {
         var p = parseParams();
+        var previousKey = params.id ? buildPath(params.id, params.season, params.episode) : '';
         params = {
             id: clean(next.id || p.id),
             season: clean(next.season !== undefined ? next.season : p.season),
@@ -999,6 +1170,15 @@
             episodeTitle: clean(next.episodeTitle !== undefined ? next.episodeTitle : p.episodeTitle) || '',
             back: clean(next.back !== undefined ? next.back : p.back) || ''
         };
+        if (params.id && buildPath(params.id, params.season, params.episode) !== previousKey) {
+            onlineSubtitleTracks = [];
+            onlineSubtitlesLoaded = false;
+            onlineSubtitlesLoading = false;
+            onlineSubtitlesPromise = null;
+            onlineSubtitlesMessage = '';
+            onlineRequestId += 1;
+            historyRecordedFor = '';
+        }
         pendingResume = Number(clean(next.resume)) > 0 ? Number(clean(next.resume)) : 0;
 
         stopPolling();
@@ -1182,9 +1362,11 @@
     function setTvSubtitleLabel() {
         if (!el.tvSubs) return;
         var on = subtitleIndex >= 0 && subtitleTracks[subtitleIndex];
-        el.tvSubs.textContent = on
-            ? 'Subtitles: ' + subtitleLabel(subtitleTracks[subtitleIndex], subtitleIndex)
-            : 'Subtitles: Off';
+        var label = on ? subtitleLabel(subtitleTracks[subtitleIndex], subtitleIndex) : '';
+        if (on && on.source === 'opensubtitles') {
+            label = SUBTITLE_LABELS[String(on.lang || '').toLowerCase()] || 'On';
+        }
+        el.tvSubs.textContent = on ? 'Subtitles: ' + label : 'Subtitles: Off';
         el.tvSubs.classList.toggle('is-active', !!on);
     }
 
@@ -1372,6 +1554,23 @@
 
         // While the options sheet is open it owns the remote: arrows walk its
         // buttons, back closes it, and nothing leaks to the player underneath.
+        if (subsSheetOpen) {
+            var subButtons = subsSheetButtons();
+            if (direction && subButtons.length) {
+                event.preventDefault();
+                var subActive = subButtons.indexOf(document.activeElement);
+                var subStep = (direction === 'left' || direction === 'up') ? -1 : 1;
+                var subNext = subActive === -1 ? 0 : (subActive + subStep + subButtons.length) % subButtons.length;
+                focusTv(subButtons[subNext]);
+                return;
+            }
+            if (isBackKey(event)) {
+                event.preventDefault();
+                closeSubsSheet();
+            }
+            return;
+        }
+
         if (tvSheetOpen) {
             var buttons = tvSheetButtons();
             if (direction && buttons.length) {
@@ -1438,9 +1637,10 @@
         if (el.tvPlay) el.tvPlay.addEventListener('click', togglePlay);
         if (el.tvFull) el.tvFull.addEventListener('click', toggleFullscreen);
         if (el.tvMute) el.tvMute.addEventListener('click', toggleMute);
-        if (el.tvSubs) el.tvSubs.addEventListener('click', cycleSubtitles);
+        if (el.tvSubs) el.tvSubs.addEventListener('click', openSubsSheet);
         if (el.tvOptions) el.tvOptions.addEventListener('click', openTvSheet);
         if (el.tvSheetClose) el.tvSheetClose.addEventListener('click', closeTvSheet);
+        if (el.subsClose) el.subsClose.addEventListener('click', closeSubsSheet);
 
         if (el.tvSeek) {
             el.tvSeek.addEventListener('pointerdown', function () { isScrubbing = true; });
@@ -1528,7 +1728,7 @@
         cancelBufferOverlay();
         bufferOverlayTimer = setTimeout(function () {
             bufferOverlayTimer = null;
-            if (isScrubbing || tvSheetOpen) return;
+            if (isScrubbing || tvSheetOpen || subsSheetOpen) return;
             showBufferOverlay();
         }, 700);
     }
@@ -1581,7 +1781,12 @@
         showToast('Episodes list is not available here');
         pokeBars();
     });
-    if (el.subs) el.subs.addEventListener('click', cycleSubtitles);
+    if (el.subs) el.subs.addEventListener('click', openSubsSheet);
+    if (!TV_MODE) {
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && subsSheetOpen) closeSubsSheet();
+        });
+    }
 
     if (el.seek) {
         el.seek.addEventListener('pointerdown', function () { isScrubbing = true; });
@@ -1622,7 +1827,12 @@
             // covers the video before that anyway.
             if (state === 'ready' && el.overlay.hidden) togglePlay();
         });
-        el.video.addEventListener('play', function () { updatePlayIcon(); pokeBars(); sendHeartbeat(); });
+        el.video.addEventListener('play', function () {
+            updatePlayIcon();
+            pokeBars();
+            sendHeartbeat();
+            recordWatchHistory();
+        });
         el.video.addEventListener('pause', function () { updatePlayIcon(); pokeBars(); });
         el.video.addEventListener('ended', function () { updatePlayIcon(); pokeBars(); });
         el.video.addEventListener('timeupdate', updateSeekUI);

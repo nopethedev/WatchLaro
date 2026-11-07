@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Who's watching? · WatchLaro</title>
+    <link rel="stylesheet" href="/themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="/themes/darkTheme/theme.css">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="bg-slate-950 text-white min-h-screen">
+    <%- include('../header.ejs') %>
+
+    <main class="max-w-6xl mx-auto px-5 py-12">
+        <div class="flex flex-wrap items-end justify-between gap-4 mb-10">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.22em] text-blue-400 mb-2">WatchLaro profiles</p>
+                <h1 class="text-4xl md:text-5xl font-black tracking-tight">Who's watching?</h1>
+                <p class="text-slate-400 mt-3">Each profile keeps its own watch history and recommendations.</p>
+            </div>
+            <div class="flex gap-2">
+                <% if (profiles.length < maxProfiles) { %>
+                <a href="/profiles/new" class="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold hover:bg-blue-500 transition">+ Add profile</a>
+                <% } %>
+                <a href="/" class="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:border-slate-500 hover:text-white transition">Back home</a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
+            <% profiles.forEach(function (profile) { %>
+            <div class="rounded-2xl border p-4 <%= Number(activeProfileId) === Number(profile.id) ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800 bg-slate-900/70' %>">
+                <form action="/profiles/<%= profile.id %>/select" method="post">
+                    <button type="submit" class="w-full text-left group" aria-label="Use <%= profile.name %> profile">
+                        <span class="block overflow-hidden rounded-xl bg-slate-800 aspect-square ring-2 ring-transparent group-hover:ring-white/70 transition">
+                            <img src="<%= profile.avatar %>" alt="" class="h-full w-full object-cover" loading="lazy">
+                        </span>
+                        <span class="mt-3 block truncate text-lg font-bold"><%= profile.name %></span>
+                        <% if (Number(activeProfileId) === Number(profile.id)) { %><span class="text-xs font-bold text-blue-400">Watching now</span><% } %>
+                    </button>
+                </form>
+                <div class="mt-3 flex items-center gap-3 text-xs">
+                    <a href="/profiles/<%= profile.id %>/edit" class="text-slate-300 hover:text-white">Edit</a>
+                    <button type="button" class="text-slate-500 hover:text-red-400" onclick="deleteProfile(<%= profile.id %>, <%- JSON.stringify(profile.name) %>)">Delete</button>
+                </div>
+            </div>
+            <% }); %>
+        </div>
+
+        <p class="mt-8 text-sm text-slate-500">
+            <%= profiles.length %> of <%= maxProfiles %> profiles used. Profiles are private to this account.
+        </p>
+        <p class="mt-2 text-xs text-slate-600">WatchLaro v<%= appVersion %></p>
+    </main>
+
+    <script>
+        async function deleteProfile(id, name) {
+            if (!confirm('Delete the profile "' + name + '"? Its watch history will be removed.')) return;
+            const response = await fetch('/api/profiles/' + id, { method: 'DELETE' });
+            const data = await response.json().catch(function () { return {}; });
+            if (!response.ok) return alert(data.error || 'Could not delete that profile.');
+            location.reload();
+        }
+    </script>
+</body>
+</html>

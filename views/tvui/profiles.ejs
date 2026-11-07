@@ -15,17 +15,47 @@
         <h1 class="tv-profiles-title">Who's watching?</h1>
 
         <div class="tv-profiles-row" data-tv-row>
-            <a class="tv-profile" href="/tvui/home" data-tv-item data-tv-autofocus>
-                <span class="tv-profile-tile"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
-                <span class="tv-profile-name">Guest</span>
+            <% if (typeof profiles !== 'undefined' && profiles.length) { %>
+                <% profiles.forEach(function (profile, index) { %>
+                <form action="/profiles/<%= profile.id %>/select?next=/tvui/home" method="post" class="tv-profile-form">
+                    <button type="submit" class="tv-profile" data-tv-item <%= index === 0 ? 'data-tv-autofocus' : '' %> aria-label="Use <%= profile.name %>">
+                        <span class="tv-profile-tile"><img src="<%= profile.avatar %>" alt=""></span>
+                        <span class="tv-profile-name"><%= profile.name %></span>
+                    </button>
+                </form>
+                <% }); %>
+            <% } else if (guestMode) { %>
+                <form action="/profiles/guest/select?next=/tvui/home" method="post" class="tv-profile-form">
+                    <button type="submit" class="tv-profile" data-tv-item data-tv-autofocus aria-label="Continue as guest">
+                        <span class="tv-profile-tile"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+                        <span class="tv-profile-name">Guest</span>
+                    </button>
+                </form>
+            <% } %>
+
+            <% if (uuid && (typeof profiles === 'undefined' || profiles.length < 5)) { %>
+            <a class="tv-profile" href="/tvui/profiles/new" data-tv-item>
+                <span class="tv-profile-tile tv-profile-add"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>
+                <span class="tv-profile-name">Add profile</span>
             </a>
+            <% } %>
         </div>
 
-        <p class="tv-profiles-hint">Only the guest profile is available right now.</p>
-
+        <% if (uuid) { %>
+        <p class="tv-profiles-hint">Choose a profile to keep everyone's watch history and recommendations separate.</p>
         <div class="tv-profiles-actions" data-tv-row>
+            <a class="tv-exit" href="/tvui/manage" data-tv-item>Manage profiles</a>
             <a class="tv-exit" href="/?tv=0" data-tv-item>Use the standard site</a>
         </div>
+        <% } else { %>
+        <p class="tv-profiles-hint">Guest mode is on. Sign in to get up to five profiles with their own recommendations.</p>
+        <div class="tv-profiles-actions" data-tv-row>
+            <a class="tv-exit" href="/login?next=/tvui/" data-tv-item>Sign in</a>
+            <a class="tv-exit" href="/?tv=0" data-tv-item>Use the standard site</a>
+        </div>
+        <% } %>
+
+        <p class="tv-profiles-version">WatchLaro v<%= appVersion %></p>
     </main>
 
     <script src="/tvui.js"></script>

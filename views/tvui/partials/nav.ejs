@@ -24,8 +24,12 @@
 
     <div class="tv-nav-right">
         <span class="tv-nav-clock" id="tv-clock" aria-hidden="true"></span>
-        <a class="tv-nav-profile" href="/tvui/" title="Switch profile" aria-label="Guest profile" data-tv-item>
-            <span class="tv-avatar"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+        <a class="tv-nav-profile" href="/tvui/" title="Switch profile" aria-label="<%= typeof profile !== 'undefined' && profile ? 'Switch from ' + profile.name : 'Choose profile' %>" data-tv-item>
+            <span class="tv-avatar">
+                <% if (typeof profile !== 'undefined' && profile && profile.avatar) { %>
+                <img src="<%= profile.avatar %>" alt="">
+                <% } else { %><i class="fa-solid fa-user" aria-hidden="true"></i><% } %>
+            </span>
         </a>
     </div>
 </nav>

@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { Op } from 'sequelize';
 import authMiddleware from '../../handlers/authMiddleware.js';
 import { User } from '../../database/index.js';
+import { ensureDefaultProfile, deleteProfilesForUser } from '../../handlers/profiles.js';
 
 const app = express.Router();
 app.use('/api/admin/users', authMiddleware.checkAdmin);
@@ -35,7 +36,8 @@ app.post('/api/admin/users/create', async (req, res) => {
     if (!result.success) return res.status(400).json({ error: result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ') });
     try {
         const data = result.data;
-        await User.create({ ...data, password: await bcrypt.hash(data.password, 12) });
+        const user = await User.create({ ...data, password: await bcrypt.hash(data.password, 12) });
+        await ensureDefaultProfile(user);
         if (req.is('application/json')) return res.status(201).json({ success: true });
         res.redirect('/admin/users');
     } catch (err) { error(res, err); }
@@ -69,6 +71,7 @@ app.delete('/api/admin/users/:uuid', async (req, res) => {
     try {
         const user = await User.findOne({ where: { uuid: req.params.uuid } });
         if (!user) return res.status(404).json({ error: 'User not found.' });
+        await deleteProfilesForUser(user.uuid);
         await user.destroy();
         res.json({ success: true });
     } catch (err) { error(res, err); }

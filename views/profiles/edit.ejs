@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit <%= profile.name %> · WatchLaro</title>
+    <link rel="stylesheet" href="/themes/darkTheme/sidebar.css">
+    <link rel="stylesheet" href="/themes/darkTheme/theme.css">
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        .wl-avatar-choice { display: flex; gap: 10px; flex-wrap: wrap; }
+        .wl-avatar-choice input { position: absolute; opacity: 0; pointer-events: none; }
+        .wl-avatar-choice label { display: block; cursor: pointer; border: 3px solid transparent; border-radius: 14px; overflow: hidden; width: 64px; height: 64px; }
+        .wl-avatar-choice label:has(input:checked) { border-color: #3b82f6; }
+        .wl-avatar-choice img { width: 100%; height: 100%; object-fit: cover; }
+    </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen">
+    <%- include('../header.ejs') %>
+    <main class="max-w-3xl mx-auto px-5 py-12">
+        <a href="/profiles" class="text-sm text-slate-400 hover:text-white">&larr; Profiles</a>
+        <h1 class="mt-3 text-4xl font-black tracking-tight">Edit <%= profile.name %></h1>
+        <p class="mt-2 text-slate-400">Change the name or avatar. Watch history and recommendations stay on this profile.</p>
+
+        <form id="editForm" class="mt-8 space-y-6">
+            <label class="block">
+                <span class="text-sm font-bold text-slate-200">Profile name</span>
+                <input id="profileName" maxlength="24" required value="<%= profile.name %>"
+                    class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
+            </label>
+            <div>
+                <span class="text-sm font-bold text-slate-200">Avatar</span>
+                <div class="wl-avatar-choice mt-2">
+                    <% avatars.forEach(function (avatar) { var url = 'https://api.dicebear.com/10.x/thumbs/svg?seed=' + encodeURIComponent(avatar.seed); %>
+                    <label title="<%= avatar.label %>">
+                        <input type="radio" name="avatar" value="<%= url %>" <%= profile.avatar === url ? 'checked' : '' %>>
+                        <img src="<%= url %>" alt="<%= avatar.label %> avatar">
+                    </label>
+                    <% }); %>
+                </div>
+            </div>
+            <p id="editError" class="hidden rounded-lg border border-red-500/40 bg-red-950/40 p-3 text-sm text-red-300"></p>
+            <div class="flex justify-between gap-3">
+                <button type="button" onclick="deleteProfile(<%= profile.id %>, <%- JSON.stringify(profile.name) %>)" class="rounded-xl border border-red-900/70 px-4 py-3 text-sm font-bold text-red-400 hover:border-red-500 hover:text-red-300">Delete profile</button>
+                <div class="flex gap-3">
+                    <a href="/profiles" class="rounded-xl border border-slate-700 px-5 py-3 font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Cancel</a>
+                    <button type="submit" class="rounded-xl bg-blue-600 px-6 py-3 font-bold text-white hover:bg-blue-500">Save changes</button>
+                </div>
+            </div>
+        </form>
+    </main>
+    <script>
+        document.getElementById('editForm').addEventListener('submit', async function (event) {
+            event.preventDefault();
+            var error = document.getElementById('editError');
+            var avatar = document.querySelector('input[name="avatar"]:checked');
+            error.classList.add('hidden');
+            var response = await fetch('/api/profiles/<%= profile.id %>', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: document.getElementById('profileName').value.trim(), avatar: avatar ? avatar.value : '' })
+            });
+            var data = await response.json().catch(function () { return {}; });
+            if (!response.ok) {
+                error.textContent = data.error || 'Could not save profile.';
+                error.classList.remove('hidden');
+                return;
+            }
+            location.href = '/profiles';
+        });
+
+        async function deleteProfile(id, name) {
+            if (!confirm('Delete the profile "' + name + '"? Its watch history will be removed.')) return;
+            var response = await fetch('/api/profiles/' + id, { method: 'DELETE' });
+            var data = await response.json().catch(function () { return {}; });
+            if (!response.ok) return alert(data.error || 'Could not delete that profile.');
+            location.href = '/profiles';
+        }
+    </script>
+</body>
+</html>

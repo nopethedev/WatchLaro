@@ -563,8 +563,8 @@
                     <i class="fa-solid fa-bookmark" aria-hidden="true"></i>
                 </a>
                 <% if (uuid) { %>
-                <a href="/profile/<%= encodeURIComponent(username || '') %>" class="wl-icon-button" aria-label="Your profile" title="Profile">
-                    <i class="fa-solid fa-circle-user" aria-hidden="true"></i>
+                <a href="/profiles" class="wl-icon-button" aria-label="Your profile" title="Profile">
+                    <% if (profile) { %><img src="<%= profile.avatar %>" alt="" class="h-7 w-7 rounded-md object-cover"><% } else { %><i class="fa-solid fa-circle-user" aria-hidden="true"></i><% } %>
                 </a>
                 <% } else { %>
                 <a href="/login" class="wl-icon-button" aria-label="Sign in" title="Sign in">
@@ -632,6 +632,22 @@
                     <div class="wl-skeleton"></div><div class="wl-skeleton"></div><div class="wl-skeleton"></div><div class="wl-skeleton"></div>
                 </div>
             </section>
+
+            <section class="wl-row" id="wl-recommended" aria-labelledby="wlRecommendedTitle">
+                <div class="wl-row-head">
+                    <h2 id="wlRecommendedTitle">Recommended for You</h2>
+                    <a href="/profiles">For <%= profile ? profile.name : 'you' %></a>
+                </div>
+                <div class="wl-row-track" id="wlRowRecommended" aria-busy="true"></div>
+            </section>
+
+            <section class="wl-row" id="wl-continue" aria-labelledby="wlContinueTitle">
+                <div class="wl-row-head">
+                    <h2 id="wlContinueTitle">Continue Watching</h2>
+                    <a href="/profiles">Switch profile</a>
+                </div>
+                <div class="wl-row-track" id="wlRowContinue" aria-busy="true"></div>
+            </section>
         </main>
 
         <nav class="wl-bottom-nav" aria-label="Main navigation">
@@ -648,7 +664,7 @@
                 <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Search</span>
             </a>
             <% if (uuid) { %>
-            <a href="/profile/<%= encodeURIComponent(username || '') %>" class="wl-nav-item">
+            <a href="/profiles" class="wl-nav-item">
                 <i class="fa-solid fa-circle-user" aria-hidden="true"></i><span>Profile</span>
             </a>
             <% } else { %>
@@ -663,8 +679,22 @@
         <div class="justify-items-center align-center">
             <h1 class="text-l font-bold">Problems when watching? Click <a href="/troubleshoot" class="text-blue-500 underline">here!</a></h1>
         </div>
-        <section class="p-10">
-            <h1 class="text-4xl font-black pb-2">🍿 Now Playing</h1>
+        <section class="p-10">                    <% if (typeof profile !== 'undefined' && profile) { %>
+                    <div class="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+                        <img src="<%= profile.avatar %>" alt="" class="h-9 w-9 rounded-md object-cover">
+                        <span class="text-sm text-slate-300">Watching as <strong class="text-white"><%= profile.name %></strong></span>
+                        <a href="/profiles" class="ml-auto rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-300 hover:border-slate-500 hover:text-white">Switch profile</a>
+                    </div>
+                    <% } %>
+                    <section class="mb-8">
+                        <h2 class="text-2xl font-black pb-2">Recommended for You</h2>
+                        <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="recommended"></div>
+                    </section>
+                    <section class="mb-8">
+                        <h2 class="text-2xl font-black pb-2">Continue Watching</h2>
+                        <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="continue_watching"></div>
+                    </section>
+                    <h1 class="text-4xl font-black pb-2">🍿 Now Playing</h1>
             <div class="flex flex-col align-center overflow-y-hidden">
                 <div class="flex overflow-x-auto gap-2 p-1 overflow-y-hidden" id="now_playing">
 
@@ -709,25 +739,40 @@
                     data.top_rated.results.forEach(element => {
                         putPoster("top_rated", element)
                     })
+                    ;(data.recommended || []).forEach(element => putPoster("recommended", element))
+                    ;(data.continue_watching || []).forEach(element => putPoster("continue_watching", element))
+                    hideDesktopRow("recommended")
+                    hideDesktopRow("continue_watching")
                 } else {
                     // document.getElementById('debugthing').innerText = 'fetch err'
                 }
             }
+            function hideDesktopRow(category) {
+                const track = document.getElementById(category)
+                if (!track || track.children.length) return
+                const section = track.closest('section')
+                if (section) section.hidden = true
+            }
+
             async function putPoster(category, element) {
                 const div = document.createElement("div")
                 div.classList.add("w-[200px]", "flex-shrink-0")
                 const btn = document.createElement("button")
                 btn.classList.add("relative","z-10", "rounded-md", "flex", "flex-col", "align-center", "hover:scale-[105%]", "transition-all", "duration-150", "group")
                 btn.onclick = function () {
-                    window.location.href = "/movies/info?q=" + element.id
+                    window.location.href = element.type === 'tv'
+                        ? '/tv/' + encodeURIComponent(element.id)
+                        : "/movies/info?q=" + encodeURIComponent(element.id)
                 }
                 const img = document.createElement("img")
+                const poster = element.poster_path || element.poster
+                if (poster) img.src = "https://image.tmdb.org/t/p/w500" + poster
+                img.alt = element.title || ''
+                img.loading = "lazy"
                 img.classList.add("rounded-md", "blur-none", "hover:blur-[4px]", "z-20")
                 const text = document.createElement("h2")
                 text.classList.add("absolute", "bottom-4", "text-lg", "font-bold", "opacity-0", "translate-y-full", "group-hover:opacity-100", "group-hover:translate-y-0", "ease-in-out", "duration-200", "text-center", "w-full", "left-0", "z-30")
                 text.innerText = element.title
-                //img.classList.add()
-                img.src = "https://image.tmdb.org/t/p/w500" + element.poster_path
                 document.getElementById(category).appendChild(div)
                 div.appendChild(btn)
                 btn.appendChild(img)
@@ -781,7 +826,9 @@
             }
 
             function movieHref(item) {
-                return '/movies/info?q=' + encodeURIComponent(item.id);
+                return item.type === 'tv'
+                    ? '/tv/' + encodeURIComponent(item.id)
+                    : '/movies/info?q=' + encodeURIComponent(item.id);
             }
 
             function setHero(item) {
@@ -826,9 +873,9 @@
                 var art = document.createElement('div');
                 art.className = 'wl-card-art';
 
-                if (item.poster_path) {
+                if (item.poster_path || item.poster) {
                     var img = document.createElement('img');
-                    img.src = base + 'w342' + item.poster_path;
+                    img.src = base + 'w342' + (item.poster_path || item.poster);
                     img.alt = '';
                     img.loading = 'lazy';
                     img.decoding = 'async';
@@ -880,6 +927,13 @@
                 });
             }
 
+            function hideEmptyRow(trackId) {
+                var track = document.getElementById(trackId);
+                if (!track || track.querySelector('.wl-card')) return;
+                var row = track.closest('.wl-row');
+                if (row) row.hidden = true;
+            }
+
             function failRows() {
                 ['wlRowPopular', 'wlRowNowPlaying', 'wlRowTopRated'].forEach(function (id) {
                     var track = document.getElementById(id);
@@ -912,6 +966,10 @@
                     fillRow('wlRowPopular', popular, true);
                     fillRow('wlRowNowPlaying', nowPlaying, false);
                     fillRow('wlRowTopRated', topRated, false);
+                    fillRow('wlRowRecommended', (data.recommended || []), false);
+                    fillRow('wlRowContinue', (data.continue_watching || []), false);
+                    hideEmptyRow('wlRowRecommended');
+                    hideEmptyRow('wlRowContinue');
                 })
                 .catch(failRows);
         })();

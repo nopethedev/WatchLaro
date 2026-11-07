@@ -4,6 +4,7 @@ import path from 'node:path';
 import NodeCache from 'node-cache';
 import * as downloader from '../handlers/downloader/index.js';
 import tmdb from '../handlers/downloader/tmdb.js';
+import * as subtitleApi from '../handlers/subtitles.js';
 import { Files } from '../database/index.js';
 import { resolveStoredFile } from '../handlers/downloadsPath.js';
 
@@ -321,6 +322,35 @@ async function handleSubs(req, res) {
     }
 }
 
+async function handleOpenSubtitles(req, res) {
+    const { id, season, episode } = req.params;
+    if (!/^\d+$/.test(String(id))) return res.status(400).json({ error: 'invalid id' });
+    try {
+        const result = await subtitleApi.searchSubtitles({
+            tmdbId: id,
+            season,
+            episode,
+            title: typeof req.query.title === 'string' ? req.query.title : ''
+        });
+        return res.json(result);
+    } catch (err) {
+        console.error('[stream/subtitles]', err.message);
+        return res.status(err.status || 502).json({ error: err.message });
+    }
+}
+
+async function handleOpenSubtitleFile(req, res) {
+    try {
+        const result = await subtitleApi.downloadSubtitle(req.params.fileId);
+        res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        return res.send(result.vtt);
+    } catch (err) {
+        console.error('[stream/subtitle-file]', err.message);
+        return res.status(err.status || 502).json({ error: err.message });
+    }
+}
+
 async function handleDownload(req, res) {
     const { id, season, episode } = req.params;
     if (!id) return res.status(400).json({ status: 'error', error: 'missing id' });
@@ -461,7 +491,13 @@ router.get('/api/stream/progress', async (req, res) => {
     }
 });
 
-// GET {api}/stream/subs/{id}[/{season}/{episode}][?lang=] - WebVTT subtitles.
+// OpenSubtitles tracks for the player's subtitle sheet. The file endpoint is
+// the actual VTT payload; the list endpoint only returns metadata.
+router.get('/api/stream/subtitles/file/:fileId', handleOpenSubtitleFile);
+router.get('/api/stream/subtitles/:id', handleOpenSubtitles);
+router.get('/api/stream/subtitles/:id/:season/:episode', handleOpenSubtitles);
+
+// GET {api}/stream/subs/{id}[/{season}/{episode}][?lang=] - local sidecar subtitles.
 // Registered before /:id so "subs" is not swallowed as an id.
 router.get('/api/stream/subs/:id', handleSubs);
 router.get('/api/stream/subs/:id/:season/:episode', handleSubs);

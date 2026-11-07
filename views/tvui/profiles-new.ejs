@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" class="tv-html">
+
+<%- include('partials/head', { pageTitle: "Create a profile" }) %>
+
+<body class="tv-body tv-onboard-page" data-tv-page="onboard" data-tv-nav="spatial" data-tv-back="/tvui/">
+    <main class="tv-onboard">
+        <div class="tv-onboard-head">
+            <a class="tv-exit" href="/tvui/" data-tv-item>← Back to profiles</a>
+            <p class="tv-onboard-kicker">A NEW WATCHLARO PROFILE</p>
+            <h1>What should we call you?</h1>
+            <p>Pick a name, then three titles you like. We’ll use their genres to make this profile’s recommendations different from everyone else’s.</p>
+        </div>
+
+        <div class="tv-onboard-name-row">
+            <label class="tv-onboard-name">
+                <span>Profile name</span>
+                <input id="profileName" maxlength="24" autocomplete="off" placeholder="e.g. Movie night" data-tv-item data-tv-autofocus>
+            </label>
+            <div class="tv-onboard-avatars" data-tv-row aria-label="Avatar">
+                <% avatars.forEach(function (avatar, index) { var url = 'https://api.dicebear.com/10.x/thumbs/svg?seed=' + encodeURIComponent(avatar.seed); %>
+                <button type="button" class="tv-onboard-avatar <%= index === 0 ? 'is-selected' : '' %>" data-avatar="<%= url %>" data-tv-item aria-label="<%= avatar.label %> avatar">
+                    <img src="<%= url %>" alt="">
+                </button>
+                <% }); %>
+            </div>
+        </div>
+
+        <div class="tv-onboard-picks-head">
+            <h2>Pick three titles you enjoy</h2>
+            <span id="pickCount">0 / 3</span>
+        </div>
+        <div id="titleGrid" class="tv-onboard-grid" aria-busy="true"></div>
+        <p id="onboardError" class="tv-onboard-error" hidden></p>
+
+        <div class="tv-onboard-actions" data-tv-row>
+            <button id="createButton" type="button" class="tv-btn tv-btn-primary" data-tv-item disabled>Pick 3 more</button>
+            <a class="tv-btn tv-btn-ghost" href="/tvui/" data-tv-item>Cancel</a>
+        </div>
+    </main>
+
+    <script src="/tvui.js"></script>
+    <script>
+        (function () {
+            var selected = [];
+            var avatar = document.querySelector('.tv-onboard-avatar.is-selected')?.getAttribute('data-avatar') || '';
+            var grid = document.getElementById('titleGrid');
+            var count = document.getElementById('pickCount');
+            var button = document.getElementById('createButton');
+            var name = document.getElementById('profileName');
+            var error = document.getElementById('onboardError');
+
+            function update() {
+                count.textContent = selected.length + ' / 3';
+                button.disabled = selected.length !== 3 || !name.value.trim();
+                button.textContent = selected.length === 3 ? 'Create profile' : 'Pick ' + (3 - selected.length) + ' more';
+            }
+
+            function showError(message) {
+                error.textContent = message;
+                error.hidden = false;
+            }
+
+            document.querySelectorAll('.tv-onboard-avatar').forEach(function (item) {
+                item.addEventListener('click', function () {
+                    document.querySelectorAll('.tv-onboard-avatar').forEach(function (other) { other.classList.remove('is-selected'); });
+                    item.classList.add('is-selected');
+                    avatar = item.getAttribute('data-avatar');
+                });
+            });
+
+            name.addEventListener('input', update);
+
+            function render(items) {
+                grid.innerHTML = '';
+                grid.setAttribute('aria-busy', 'false');
+                items.forEach(function (item) {
+                    var card = document.createElement('button');
+                    card.type = 'button';
+                    card.className = 'tv-onboard-card';
+                    card.setAttribute('data-tv-item', '');
+                    card.setAttribute('aria-pressed', 'false');
+                    card.setAttribute('aria-label', item.title);
+                    var img = document.createElement('img');
+                    img.src = 'https://image.tmdb.org/t/p/w342' + item.poster;
+                    img.alt = '';
+                    img.loading = 'lazy';
+                    var label = document.createElement('span');
+                    label.textContent = item.title;
+                    card.appendChild(img);
+                    card.appendChild(label);
+                    card.addEventListener('click', function () {
+                        var index = selected.findIndex(function (entry) { return entry.type === item.type && entry.id === item.id; });
+                        if (index >= 0) {
+                            selected.splice(index, 1);
+                            card.classList.remove('is-picked');
+                            card.setAttribute('aria-pressed', 'false');
+                        } else if (selected.length < 3) {
+                            selected.push({ type: item.type, id: item.id });
+                            card.classList.add('is-picked');
+                            card.setAttribute('aria-pressed', 'true');
+                        }
+                        update();
+                    });
+                    grid.appendChild(card);
+                });
+            }
+
+            button.addEventListener('click', async function () {
+                if (selected.length !== 3) return;
+                button.disabled = true;
+                error.hidden = true;
+                try {
+                    var response = await fetch('/api/profiles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: name.value.trim(), avatar: avatar, seeds: selected })
+                    });
+                    var data = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(data.error || 'Could not create the profile.');
+                    location.href = '/tvui/home';
+                } catch (err) {
+                    button.disabled = false;
+                    update();
+                    showError(err.message);
+                }
+            });
+
+            fetch('/api/profiles/onboarding')
+                .then(function (response) {
+                    if (!response.ok) throw new Error('Could not load titles.');
+                    return response.json();
+                })
+                .then(function (data) {
+                    if (!data.items || !data.items.length) throw new Error('No titles available.');
+                    render(data.items.slice(0, 50));
+                })
+                .catch(function (err) {
+                    grid.innerHTML = '';
+                    showError(err.message);
+                });
+        })();
+    </script>
+</body>
+</html>

@@ -1,6 +1,15 @@
 import axios from "axios";
 import express from "express";
 import NodeCache from "node-cache";
+import {
+    getProfileForUser,
+    listProfiles,
+    recommendationsForProfile,
+    continueWatching,
+    PROFILE_AVATARS,
+    MAX_PROFILES
+} from "../handlers/profiles.js";
+import { requireUser, wantsJson } from "../handlers/viewerContext.js";
 
 const router = express.Router();
 const tvuiCache = new NodeCache({ stdTTL: 43200, checkperiod: 600 });
@@ -77,7 +86,13 @@ function mapItem(media) {
     };
 }
 
-async function buildFeed(mode) {
+function requireTvProfile(req, res, next) {
+    if (req.activeProfile) return next();
+    if (wantsJson(req)) return res.status(401).json({ error: "Choose a profile first." });
+    return res.redirect("/tvui/");
+}
+
+async function buildFeed(mode, profile) {
     const config = MODES[mode] || MODES.all;
     const settled = await Promise.allSettled(config.rows.map((row) => tmdbGet(row.path)));
 
@@ -90,6 +105,19 @@ async function buildFeed(mode) {
         const items = (result.value?.results || []).map(mapItem).filter(Boolean);
         if (items.length) rows.push({ title: config.rows[index].title, items });
     });
+
+    if (profile && !profile.guest) {
+        try {
+            const watched = await continueWatching(profile.id, 15);
+            if (watched.length) rows.unshift({ title: "Continue Watching", items: watched });
+            const recommended = await recommendationsForProfile(profile, 18);
+            if (recommended.length) {
+                rows.splice(watched.length ? 1 : 0, 0, { title: "Recommended for You", items: recommended });
+            }
+        } catch (err) {
+            console.error("[tvui] personal rows failed:", err.message);
+        }
+    }
 
     // Bigger pool for the rotating billboard; dedupe titles that appear in
     // several rows (e.g. a show that is both popular and top rated).
@@ -110,14 +138,15 @@ async function buildFeed(mode) {
 
 router.get("/api/tvui/feed", async (req, res) => {
     const mode = Object.hasOwn(MODES, String(req.query.type)) ? String(req.query.type) : "all";
-    const cacheKey = "tvui:feed:" + mode;
+    const profile = req.activeProfile && !req.activeProfile.guest ? req.activeProfile : null;
+    const cacheKey = "tvui:feed:" + mode + ":" + (profile?.id || "guest");
     const cached = tvuiCache.get(cacheKey);
     if (cached) return res.json(cached);
 
     try {
-        const feed = await buildFeed(mode);
+        const feed = await buildFeed(mode, profile);
         if (!feed.rows.length) return res.status(502).json({ error: "Could not load the catalogue" });
-        tvuiCache.set(cacheKey, feed);
+        tvuiCache.set(cacheKey, feed, profile ? 300 : 43200);
         return res.json(feed);
     } catch (err) {
         console.error("[tvui/feed]", err?.message ?? err);
@@ -183,12 +212,45 @@ router.get("/api/tvui/videos/:type/:id", async (req, res) => {
 // "/tvui/", which would redirect the profile page to itself.
 router.get(/^\/tvui$/, (req, res) => res.redirect("/tvui/"));
 
-router.get("/tvui/", (req, res) => {
-    res.render("tvui/profiles.ejs", { active: "profiles" });
+router.get("/tvui/", async (req, res, next) => {
+    try {
+        let profiles = [];
+        if (req.session?.user?.uuid) profiles = await listProfiles(req.session.user.uuid);
+        res.render("tvui/profiles.ejs", {
+            active: "profiles",
+            profiles,
+            guestMode: res.locals.guestMode,
+            maxProfiles: MAX_PROFILES,
+            appVersion: res.locals.appVersion
+        });
+    } catch (err) { next(err); }
+});
+
+router.get("/tvui/profiles/new", requireUser, async (req, res, next) => {
+    try {
+        const profiles = await listProfiles(req.session.user.uuid);
+        if (profiles.length >= MAX_PROFILES) return res.redirect("/tvui/manage");
+        res.render("tvui/profiles-new.ejs", { avatars: PROFILE_AVATARS, maxProfiles: MAX_PROFILES });
+    } catch (err) { next(err); }
+});
+
+router.get("/tvui/manage", requireUser, async (req, res, next) => {
+    try {
+        const profiles = await listProfiles(req.session.user.uuid);
+        res.render("tvui/manage.ejs", { profiles });
+    } catch (err) { next(err); }
+});
+
+router.get("/tvui/profiles/:id/edit", requireUser, async (req, res, next) => {
+    try {
+        const profile = await getProfileForUser(req.session.user.uuid, req.params.id);
+        if (!profile) return res.status(404).send("Profile not found");
+        res.render("tvui/profile-edit.ejs", { profile, avatars: PROFILE_AVATARS });
+    } catch (err) { next(err); }
 });
 
 for (const [slug, mode] of Object.entries({ home: "all", movies: "movie", shows: "tv" })) {
-    router.get("/tvui/" + slug, (req, res) => {
+    router.get("/tvui/" + slug, requireTvProfile, (req, res) => {
         res.render("tvui/browse.ejs", {
             active: slug,
             mode,
@@ -197,11 +259,11 @@ for (const [slug, mode] of Object.entries({ home: "all", movies: "movie", shows:
     });
 }
 
-router.get("/tvui/search", (req, res) => {
+router.get("/tvui/search", requireTvProfile, (req, res) => {
     res.render("tvui/search.ejs", { active: "search", pageTitle: "Search" });
 });
 
-router.get("/tvui/info/:type/:id", (req, res) => {
+router.get("/tvui/info/:type/:id", requireTvProfile, (req, res) => {
     const { type, id } = req.params;
     if ((type !== "movie" && type !== "tv") || !/^\d+$/.test(String(id))) {
         return res.redirect("/tvui/home");
@@ -214,7 +276,7 @@ router.get("/tvui/info/:type/:id", (req, res) => {
     });
 });
 
-router.get("/tvui/watch", (req, res) => {
+router.get("/tvui/watch", requireTvProfile, (req, res) => {
     const type = req.query.type === "tv" ? "tv" : "movie";
     const id = String(req.query.id ?? "");
     if (!/^\d+$/.test(id)) return res.redirect("/tvui/home");

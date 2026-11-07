@@ -45,7 +45,7 @@ app.get('/admin/settings', authMiddleware.checkManager, async (req, res) => {
     try {
         fs.mkdirSync(downloadsDir, { recursive: true });
         const disk = await checkDiskSpace(downloadsDir);
-        res.render('admin/settings.ejs', { settings: { downloadsDir, disk, dialect: sequelize.getDialect(), node: process.version, tmdbConfigured: Boolean(process.env.TMDB_KEY), ...getAdminSettings() } });
+        res.render('admin/settings.ejs', { settings: { downloadsDir, disk, dialect: sequelize.getDialect(), node: process.version, tmdbConfigured: Boolean(process.env.TMDB_KEY), subtitlesConfigured: Boolean(process.env.OPENSUBTITLES_API_KEY), ...getAdminSettings() } });
     } catch { res.status(500).send('Could not load server settings'); }
 });
 

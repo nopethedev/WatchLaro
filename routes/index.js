@@ -10,6 +10,7 @@ import tv from "./tv.js";
 import user from "./user.js";
 import stream from "./stream.js";
 import tvui from "./tvui.js";
+import profiles from "./profiles.js";
 
 
 export default [
@@ -23,5 +24,6 @@ export default [
     tv,
     user,
     stream,
+    profiles,
     tvui,
 ]

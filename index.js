@@ -8,6 +8,9 @@ import multer from "multer";
 import cors from "cors";
 import axios from "axios";
 import nodeCache from "node-cache"
+import { APP_VERSION } from "./handlers/version.js";
+import { SequelizeSessionStore } from "./handlers/sessionStore.js";
+import { gateAccess, loadViewer } from "./handlers/viewerContext.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +25,7 @@ import createAdminAccount from "./handlers/createAdminAccount.js";
 import routes from "./routes/index.js";
 import tmdb from "./handlers/downloader/tmdb.js";
 import { resumeDownloads } from "./routes/admin/media.js";
+import { ensureDefaultProfiles } from "./handlers/profiles.js";
 
 //Init Database First
 await initDB();
@@ -29,12 +33,24 @@ await resumeDownloads();
 
 //check admin
 await createAdminAccount();
+await ensureDefaultProfiles();
+
+app.locals.appVersion = APP_VERSION;
+app.set('trust proxy', 1);
 //set up sessions
 app.use(cors())
 app.use(session({
-    secret: 'Poop7283WetTowels69Piss23YourMom38483849Diarrhea1239',
+    name: 'watchlaro.sid',
+    secret: process.env.SESSION_SECRET || 'Poop7283WetTowels69Piss23YourMom38483849Diarrhea1239',
+    store: new SequelizeSessionStore({ defaultMaxAge: 30 * 24 * 60 * 60 * 1000 }),
     resave: false,
     saveUninitialized: false,
+    rolling: true,
+    cookie: {
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        httpOnly: true,
+        sameSite: 'lax',
+    },
 }));
 
 
@@ -50,12 +66,15 @@ app.use(express.static("public"));
 app.locals.basedir = app.get('views');
 app.locals.basedir = path.join(__dirname, 'views');
 
-// Middleware to set default variables for all views
-app.use((req, res, next) => {
-    res.locals.uuid = req.session.user?.uuid || null;
-    res.locals.username = req.session.user?.username || null;
-    res.locals.rank = req.session.user?.rank || null;
-    next(); // Proceed to the next middleware or route handler
+// Resolve the account/profile for every request, then apply the admin's
+// account-vs-guest access rule. Share links and the player are deliberately
+// public, regardless of the guest-mode setting.
+app.use(loadViewer);
+app.use(gateAccess);
+
+app.get('/api/version', (req, res) => {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json({ name: 'WatchLaro', version: APP_VERSION });
 });
 
 // ---- TV mode ----
@@ -110,7 +129,7 @@ app.get('/install', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-    res.render('login.ejs', { error: " " }); // Add route-specific variables
+    res.render('login.ejs', { error: " ", next: typeof req.query.next === 'string' ? req.query.next : "" }); // Add route-specific variables
 });
 
 app.get('/register', (req, res) => {

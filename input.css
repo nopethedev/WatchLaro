@@ -524,16 +524,27 @@
         font-size: clamp(2rem, 3.4vw, 3rem);
     }
 
-    .tv-profiles-row { @apply flex gap-[2.2rem]; }
+    .tv-profiles-row { @apply flex flex-wrap justify-center gap-[2.2rem]; }
 
     .tv-profile {
         @apply flex cursor-pointer flex-col items-center gap-[.95rem] border-0 bg-transparent p-0 text-[#b8b8c6] no-underline;
         font-family: inherit;
     }
 
+    .tv-profile-form { display: contents; }
+
     .tv-profile-tile {
-        @apply grid size-[11rem] place-items-center rounded-2xl border-[3px] border-transparent text-[3.4rem] text-[#d3e3ff] transition-[scale,border-color,box-shadow] duration-[160ms] ease-in-out;
+        @apply grid size-[11rem] place-items-center overflow-hidden rounded-2xl border-[3px] border-transparent text-[3.4rem] text-[#d3e3ff] transition-[scale,border-color,box-shadow] duration-[160ms] ease-in-out;
         background: linear-gradient(150deg, #2b3d5c, #12141b);
+    }
+
+    .tv-profile-tile img,
+    .tv-avatar img {
+        @apply h-full w-full object-cover;
+    }
+
+    .tv-profile-tile.tv-profile-add {
+        @apply border-dashed border-white/35 bg-white/[.04] text-white/75;
     }
 
     .tv-profile-name { @apply text-[1.2rem] font-semibold transition-colors duration-[160ms]; }
@@ -545,8 +556,113 @@
     }
 
     .tv-profile:focus .tv-profile-name { @apply text-white; }
-    .tv-profiles-hint { @apply m-0 text-[.95rem] text-[#8b8b9c]; }
-    .tv-profiles-actions { @apply flex justify-center; }
+    .tv-profiles-hint { @apply m-0 max-w-[42rem] text-[.95rem] leading-relaxed text-[#8b8b9c]; }
+    .tv-profiles-actions { @apply flex flex-wrap justify-center; }
+    .tv-profiles-version { @apply m-0 text-[.72rem] tracking-[.12em] text-white/30; }
+
+    /* ---------------------------------------------------------------- *
+     * Profile onboarding and management
+     * ---------------------------------------------------------------- */
+
+    .tv-onboard {
+        @apply mx-auto flex min-h-screen w-full max-w-[112rem] flex-col gap-[1.35rem] px-[var(--tv-pad)] pb-16;
+        padding-top: 2.5rem;
+    }
+
+    .tv-onboard-head { @apply flex flex-col items-start gap-[.5rem]; }
+
+    .tv-onboard-head .tv-exit { @apply -ml-[1.1rem]; }
+
+    .tv-onboard-kicker {
+        @apply m-0 mt-2 text-[.72rem] font-extrabold uppercase tracking-[.2em] text-tv-accent;
+    }
+
+    .tv-onboard-head h1 {
+        @apply m-0 font-black leading-[1.02] tracking-[-.03em];
+        font-size: clamp(2rem, 3.4vw, 3.4rem);
+    }
+
+    .tv-onboard-head p:not(.tv-onboard-kicker) {
+        @apply m-0 max-w-[52rem] text-[.95rem] leading-relaxed text-[#a8a8b8];
+    }
+
+    .tv-onboard-name-row {
+        @apply flex flex-wrap items-end gap-x-10 gap-y-5 rounded-xl border border-white/10 bg-white/[.035] p-5;
+    }
+
+    .tv-onboard-name { @apply flex min-w-[15rem] flex-col gap-2; }
+
+    .tv-onboard-name > span {
+        @apply text-[.7rem] font-extrabold uppercase tracking-[.14em] text-[#a8a8b8];
+    }
+
+    .tv-onboard-name input {
+        @apply min-w-0 rounded-lg border-2 border-white/15 bg-black/30 px-3 py-[.7rem] text-[1.05rem] font-semibold text-white outline-none;
+        font-family: inherit;
+    }
+
+    .tv-onboard-name input:focus { @apply border-white bg-black/50; }
+
+    .tv-onboard-avatars { @apply flex flex-wrap items-center gap-2; }
+
+    .tv-onboard-avatar {
+        @apply grid size-[3.4rem] cursor-pointer place-items-center overflow-hidden rounded-full border-[3px] border-transparent bg-white/10 p-0 transition-[scale,border-color] duration-150;
+    }
+
+    .tv-onboard-avatar img { @apply h-full w-full object-cover; }
+    .tv-onboard-avatar:focus { @apply scale-110 border-white outline-none; }
+    .tv-onboard-avatar.is-selected { @apply border-tv-accent; }
+
+    .tv-onboard-picks-head {
+        @apply mt-1 flex items-center justify-between gap-4 border-b border-white/10 pb-2;
+    }
+
+    .tv-onboard-picks-head h2 { @apply m-0 text-[1.1rem] font-bold; }
+
+    .tv-onboard-picks-head span {
+        @apply text-[.78rem] font-bold tabular-nums text-tv-accent;
+    }
+
+    .tv-onboard-grid {
+        @apply grid gap-x-3 gap-y-4;
+        grid-template-columns: repeat(auto-fill, minmax(8.2rem, 1fr));
+    }
+
+    .tv-onboard-card {
+        @apply relative aspect-[2/3] cursor-pointer overflow-hidden rounded-lg border-[3px] border-transparent bg-[#1b1b23] p-0 text-left text-white outline-none transition-[scale,border-color] duration-150;
+        font-family: inherit;
+    }
+
+    .tv-onboard-card img { @apply h-full w-full object-cover; }
+
+    .tv-onboard-card span {
+        @apply absolute inset-x-0 bottom-0 line-clamp-2 bg-gradient-to-t from-black/95 to-transparent px-2 pb-2 pt-8 text-[.74rem] font-bold leading-tight;
+    }
+
+    .tv-onboard-card:focus { @apply scale-[1.04] border-white; }
+    .tv-onboard-card.is-picked { @apply border-tv-accent; }
+    .tv-onboard-card.is-picked::after {
+        content: "\2713";
+        @apply absolute right-1.5 top-1.5 grid size-6 place-items-center rounded-full bg-tv-accent text-[.8rem] font-black text-white;
+    }
+
+    .tv-onboard-error {
+        @apply m-0 rounded-lg border border-red-400/40 bg-red-950/60 px-4 py-3 text-[.86rem] text-red-100;
+    }
+
+    .tv-onboard-actions { @apply mt-1 flex flex-wrap items-center gap-3; }
+
+    .tv-manage-list { @apply flex flex-wrap gap-4; }
+
+    .tv-manage-card {
+        @apply flex items-center gap-4 rounded-xl border border-white/10 bg-white/[.045] p-4;
+    }
+
+    .tv-manage-card .tv-profile-tile { @apply size-[4.6rem] rounded-lg text-[1.4rem]; }
+    .tv-manage-card strong { @apply min-w-[6rem] text-[1rem]; }
+    .tv-manage-actions { @apply flex flex-wrap gap-1; }
+
+    .tv-onboard-compact { @apply max-w-[76rem]; }
 
     .tv-exit {
         @apply rounded-[.4rem] border-2 border-transparent px-[1.1rem] py-[.6rem] text-[.95rem] text-[#9aa0b4] no-underline transition-[color,background-color,border-color] duration-[160ms] ease-in-out;
@@ -758,7 +874,19 @@
     .tv-profile-name { @apply text-base; }
     .tv-profile:focus .tv-profile-tile { @apply scale-[1.03]; }
     .tv-profiles-hint { @apply text-[.78rem]; }
+    .tv-profiles-actions { @apply gap-1; }
     .tv-exit { @apply text-[.78rem]; }
+    .tv-onboard { @apply gap-4 px-4 pb-10; padding-top: 1.2rem; }
+    .tv-onboard-name-row { @apply gap-5 p-4; }
+    .tv-onboard-name { @apply min-w-full; }
+    .tv-onboard-avatar { @apply size-[2.8rem]; }
+    .tv-onboard-grid { grid-template-columns: repeat(auto-fill, minmax(6.25rem, 1fr)); }
+    .tv-onboard-card span { @apply text-[.62rem]; }
+    .tv-onboard-head h1 { font-size: 1.7rem; }
+    .tv-onboard-head p:not(.tv-onboard-kicker) { @apply text-[.8rem]; }
+    .tv-onboard-actions { @apply gap-2; }
+    .tv-manage-card { @apply w-full; }
+    .tv-manage-card .tv-profile-tile { @apply size-[3.5rem]; }
     .tv-search-layout {
         @apply block gap-0 px-[var(--tv-pad)] pb-24;
         padding-top: calc(var(--tv-nav-h) + 1rem);

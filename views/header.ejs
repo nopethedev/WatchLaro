@@ -70,6 +70,15 @@
                             </a>
                         </li>
 
+                        <% if (typeof profile !== 'undefined' && profile) { %>
+                        <li>
+                            <a href="/profiles" class="flex items-center gap-2 hover:text-gray-200 transition font-medium" title="Switch profile">
+                                <img src="<%= profile.avatar %>" alt="" class="h-7 w-7 rounded-md object-cover">
+                                <span class="max-w-24 truncate"><%= profile.name %></span>
+                            </a>
+                        </li>
+                        <% } %>
+
                         <!-- Account Dropdown with Alpine.js -->
                         <li class="relative" x-data="{ dropdownOpen: false }">
                             <button @click="dropdownOpen = !dropdownOpen" @click.outside="dropdownOpen = false"
@@ -85,10 +94,14 @@
                                 class="absolute left-0 mt-3 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 text-gray-800">
                                 <div class="py-1">
                                     <% if (uuid) { %>
-                                        <a href="#"
+                                        <a href="/profiles"
                                             class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
                                             <i class="fa-solid fa-circle-user text-brand"></i>
-                                            <%= username %>
+                                            <%= profile ? profile.name : username %>
+                                        </a>
+                                        <a href="/profiles"
+                                            class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
+                                            <i class="fa-solid fa-users text-brand"></i>Switch profile
                                         </a>
                                         <% if (rank=="admin" ||rank=="manager" ){ %>
                                             <a href="/admin"
@@ -104,6 +117,10 @@
                                                 <a href="#"
                                                     class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
                                                     <i class="fa-solid fa-user-gear text-brand"></i>Settings
+                                                </a>
+                                                <a href="/logout"
+                                                    class="block px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2">
+                                                    <i class="fa-solid fa-right-from-bracket text-brand"></i>Log out
                                                 </a>
                                                 <% } else { %>
                                                     <a href="/register"
@@ -164,9 +181,12 @@
                     <div x-show="mobileDropdownOpen" x-transition
                         class="px-4 py-2 space-y-2 bg-[#5b78b8] rounded-md mt-1 mx-2">
                         <% if (uuid) { %>
-                            <a href="#" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                            <a href="/profiles" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
                                 <i class="fa-solid fa-circle-user"></i>
-                                <%= username %>
+                                <%= profile ? profile.name : username %>
+                            </a>
+                            <a href="/profiles" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                                <i class="fa-solid fa-users"></i>Switch profile
                             </a>
                             <% if (rank=="admin" || rank=="manager"){ %>
                                 <a href="/admin" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
@@ -179,6 +199,9 @@
                             <div class="border-t border-brand my-1"></div>
                             <a href="#" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
                                 <i class="fa-solid fa-user-gear"></i>Settings
+                            </a>
+                            <a href="/logout" class="block py-1 text-sm hover:text-gray-200 flex items-center gap-2">
+                                <i class="fa-solid fa-right-from-bracket"></i>Log out
                             </a>
                             <% } else { %>
                                 <a href="/register" class="block py-1 text-sm text-gray-300 flex items-center gap-2">

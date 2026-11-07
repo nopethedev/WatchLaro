@@ -1,6 +1,7 @@
 import { sequelize, User } from "../database/index.js";
 import { verify } from "hcaptcha";
 import bcrypt from "bcrypt";
+import { ensureDefaultProfile } from "./profiles.js";
 //import { Sequelize } from "sequelize";
 const hCaptchaSecret = "ES_2fc9190ff4ac4bb2888a87ab55c3d9b0"
 
@@ -30,7 +31,7 @@ export async function registerUser(username, password, email, token) {
 
           if (isValid) {
             if (username.length <= 16) {
-              await User.create({
+              const user = await User.create({
                 username: username,
                 email: email,
                 password: bcrypt.hashSync(password, bcrypt.genSaltSync(10)),
@@ -38,11 +39,12 @@ export async function registerUser(username, password, email, token) {
                 bio: "Hey! I am a new Laro user!",
                 followers: 0,
                 following: 0,
-                rank: "Member",
+                rank: "member",
                 userid: Math.random().toString(36).substring(2, 10),
                 isAdmin: false
               });
-              return { error: false, error_msg: "", success: true }
+              await ensureDefaultProfile(user);
+              return { error: false, error_msg: "", success: true, uuid: user.uuid, username: user.username }
             } else {
               return { error: true, error_msg: "Username is too long! (Limit: 16)" };
             }
@@ -75,6 +77,7 @@ export async function loginUser(username, password) {
         //verify password
         const passCheck = await bcrypt.compare(password, userFromDB.password);
         if (passCheck) {
+          await ensureDefaultProfile(userFromDB);
           return { error: false, error_msg: " ", success: true, uuid: userFromDB.uuid, rank: userFromDB.rank, username: userFromDB.username};
         } else {
           return { error: true, error_msg: "Wrong password try again!" };
