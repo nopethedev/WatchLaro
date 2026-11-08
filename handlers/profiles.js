@@ -303,20 +303,32 @@ export async function recordWatch(profileId, { type, id, title, season, episode 
         lastWatchedAt: new Date()
     };
 
-    const existing = await WatchHistory.findOne({
-        where: { profileId: profile.id, mediaType, tmdbId }
-    });
+    const where = { profileId: profile.id, mediaType, tmdbId };
+    const existing = await WatchHistory.findOne({ where });
     let row;
+    let created = false;
     if (existing) {
         row = await existing.update(values);
     } else {
-        row = await WatchHistory.create(values);
+        try {
+            row = await WatchHistory.create(values);
+            created = true;
+        } catch (err) {
+            if (err.name !== "SequelizeUniqueConstraintError") throw err;
+            // Another player/client recorded the same title at the same time.
+            const raced = await WatchHistory.findOne({ where });
+            if (!raced) throw err;
+            row = await raced.update(values);
+        }
+    }
+    if (created) {
         // Count a title once toward taste, not once per rewatch/episode.
         const weights = parseGenreWeights(profile);
         addWeights(weights, genres);
         await profile.update({ genreWeights: serializeWeights(weights), lastUsedAt: new Date() });
+    } else {
+        await profile.update({ lastUsedAt: new Date() });
     }
-    if (existing) await profile.update({ lastUsedAt: new Date() });
     return row;
 }
 
